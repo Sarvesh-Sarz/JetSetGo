@@ -1,0 +1,5 @@
+# No secrets file in this project
+# Keys are in script.js — remember to replace before pushing
+*.env
+.DS_Store
+Thumbs.db
