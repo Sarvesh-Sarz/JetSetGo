@@ -12,13 +12,13 @@
 ═══════════════════════════════════════════════════════════════ */
 
 const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyBr0u1BEMjq0vb4DcSCIGsVaCj87CW06-k",
-    authDomain: "jetsetgo-49591.firebaseapp.com",
-    projectId: "jetsetgo-49591",
-    storageBucket: "jetsetgo-49591.firebasestorage.app",
-    messagingSenderId: "409166319561",
-    appId: "1:409166319561:web:9afae5e1811d17eb6ca218",
-    measurementId: "G-0V4771TR8Q"
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: "",
+    measurementId: ""
 };
 
 let db, auth;
@@ -70,9 +70,9 @@ function isFirebaseConfigured() {
    Template variables: {{to_email}}, {{to_name}}, {{otp_code}}
 ═══════════════════════════════════════════════════════════════ */
 
-const EMAILJS_PUBLIC_KEY   = "zNnCUudcTC7T85FCQ";
-const EMAILJS_SERVICE_ID   = "service_259r3rj";
-const EMAILJS_OTP_TEMPLATE = "template_p12pyi4";
+const EMAILJS_PUBLIC_KEY   = "";
+const EMAILJS_SERVICE_ID   = "";
+const EMAILJS_OTP_TEMPLATE = "";
 
 let _emailJsReady = false;
 
