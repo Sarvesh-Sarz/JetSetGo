@@ -24,6 +24,7 @@ Live Features
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 📁 Project Structure
+```
 JetSetGo/
 ├── index.html          # Home page with flight search
 ├── login.html          # Login page
@@ -35,6 +36,8 @@ JetSetGo/
 ├── style.css           # Complete design system
 ├── script.js           # All application logic
 └── README.md
+```
+
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -198,4 +201,3 @@ Future Improvements
 - [ ] Admin dashboard for managing flights
 - [ ] Push notifications for flight status
 - [ ] Multi-language support
-
