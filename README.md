@@ -1,10 +1,40 @@
-# JetSetGo
-Full stack , user-friendly web application to book flight tickets 
 
-# ✈ JetSetGo — Premium Flight Booking Web Application
+     ██╗███████╗████████╗███████╗███████╗████████╗ ██████╗  ██████╗ 
+     ██║██╔════╝╚══██╔══╝██╔════╝██╔════╝╚══██╔══╝██╔════╝ ██╔═══██╗
+     ██║█████╗     ██║   ███████╗█████╗     ██║   ██║  ███╗██║   ██║
+██   ██║██╔══╝     ██║   ╚════██║██╔══╝     ██║   ██║   ██║██║   ██║
+╚█████╔╝███████╗   ██║   ███████║███████╗   ██║   ╚██████╔╝╚██████╔╝
+ ╚════╝ ╚══════╝   ╚═╝   ╚══════╝╚══════╝   ╚═╝    ╚═════╝  ╚═════╝
+<div align="center">
+✈   Book smarter. Fly together. Split the fare.    ✈
+<br/>
+Show Image
+Show Image
+Show Image
+Show Image
+Show Image
+<br/>
 
-A fully functional, multi-page flight booking web application built with vanilla HTML, CSS, and JavaScript.
+A fully functional,Full stack , user-friendly, multi-page flight booking web application built with vanilla HTML, CSS, and JavaScript.
 Features real authentication via Firebase, OTP verification via EmailJS, split fare payments, and a standalone passenger payment portal.
+
+<br/>
+
+🗺 Quick Navigation
+✨ Features  • 
+📁 Structure  • 
+⚙️ Setup  • 
+🔄 User Flow  • 
+💡 How It Works  • 
+🎨 Design  • 
+📦 Free Limits  • 
+🔮 Roadmap
+
+</div>
+
+
+
+
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
