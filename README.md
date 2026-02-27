@@ -8,11 +8,11 @@
      ╚════╝ ╚══════╝   ╚═╝   ╚══════╝╚══════╝   ╚═╝    ╚═════╝  ╚═════╝ 
 ```
 
-<div align="center">
+
 
 ### ✈ &nbsp; *Book smarter. Fly together. Split the fare.*  &nbsp; ✈
 
-<br/>
+
 
 A fully functional,Full stack , user-friendly, multi-page flight booking web application built with vanilla HTML, CSS, and JavaScript.
 Features real authentication via Firebase, OTP verification via EmailJS, split fare payments, and a standalone passenger payment portal.
