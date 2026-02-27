@@ -1,13 +1,12 @@
 "use strict";
 
 const FIREBASE_CONFIG = {
-    apiKey: "##########",
-    authDomain: "##########",
-    projectId: "##########",
-    storageBucket: "##########",
-    messagingSenderId: "##########",
-    appId: "##########",
-    measurementId: "##########"
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID",
 };
 
 let db, auth;
@@ -59,9 +58,9 @@ function isFirebaseConfigured() {
    Template variables: {{to_email}}, {{to_name}}, {{otp_code}}
 ═══════════════════════════════════════════════════════════════ */
 
-const EMAILJS_PUBLIC_KEY   = "##########";
-const EMAILJS_SERVICE_ID   = "##########";
-const EMAILJS_OTP_TEMPLATE = "##########";
+const EMAILJS_PUBLIC_KEY   = "YOUR_PUBLIC_KEY_HERE";
+const EMAILJS_SERVICE_ID   = "YOUR_SERVICE_ID_HERE";
+const EMAILJS_OTP_TEMPLATE = "YOUR_OTP_TEMPLATE_ID";
 
 let _emailJsReady = false;
 
