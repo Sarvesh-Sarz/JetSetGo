@@ -1,24 +1,13 @@
-/**
- * JetSetGo — Premium Flight Booking Application
- * script.js — Firebase + EmailJS powered
- */
-
 "use strict";
 
-/* ═══════════════════════════════════════════════════════════════
-   1. FIREBASE CONFIG
-   Setup: console.firebase.google.com → New Project → Web App
-   → Authentication (Email/Password) → Firestore Database (test mode)
-═══════════════════════════════════════════════════════════════ */
-
 const FIREBASE_CONFIG = {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: "",
-    measurementId: ""
+    apiKey: "##########",
+    authDomain: "##########",
+    projectId: "##########",
+    storageBucket: "##########",
+    messagingSenderId: "##########",
+    appId: "##########",
+    measurementId: "##########"
 };
 
 let db, auth;
@@ -70,9 +59,9 @@ function isFirebaseConfigured() {
    Template variables: {{to_email}}, {{to_name}}, {{otp_code}}
 ═══════════════════════════════════════════════════════════════ */
 
-const EMAILJS_PUBLIC_KEY   = "";
-const EMAILJS_SERVICE_ID   = "";
-const EMAILJS_OTP_TEMPLATE = "";
+const EMAILJS_PUBLIC_KEY   = "##########";
+const EMAILJS_SERVICE_ID   = "##########";
+const EMAILJS_OTP_TEMPLATE = "##########";
 
 let _emailJsReady = false;
 
