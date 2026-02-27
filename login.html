@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — JetSetGo</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">✈ JetSetGo</a>
+  <div class="nav-links">
+    <button class="theme-toggle" id="theme-toggle" title="Toggle theme">🌙</button>
+  </div>
+</nav>
+
+<div class="auth-page">
+  <div class="auth-container">
+    <!-- Sidebar -->
+    <div class="auth-sidebar">
+      <div class="logo-auth">✈ JetSetGo</div>
+      <h2>Welcome Back, Traveler</h2>
+      <p>Sign in to access your bookings, manage trips, and discover exclusive deals tailored for you.</p>
+      <span class="plane-icon">✈</span>
+    </div>
+
+    <!-- Form -->
+    <div class="auth-form-panel">
+      <h2>Sign In</h2>
+      <p class="subtitle">Don't have an account? <a href="signup.html">Create one →</a></p>
+
+      <form class="auth-form" id="login-form" novalidate>
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-control" id="login-email"
+            placeholder="you@example.com" autocomplete="email" />
+          <span class="form-error hidden" id="login-email-err">⚠ Please enter a valid email.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <div style="position:relative;">
+            <input type="password" class="form-control" id="login-password"
+              placeholder="••••••••" autocomplete="current-password" />
+            <button type="button" id="toggle-pw" style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-muted);">👁</button>
+          </div>
+          <span class="form-error hidden" id="login-pw-err">⚠ Password must be at least 6 characters.</span>
+        </div>
+
+        <div class="form-error hidden text-center" id="login-general-err"></div>
+
+        <button type="submit" class="btn btn-primary btn-lg w-full" id="login-submit">
+          Sign In ✈
+        </button>
+      </form>
+
+      <div class="divider">or sign in with demo account</div>
+      <button class="btn btn-ghost w-full" id="demo-login">
+        🧪 Use Demo Account
+      </button>
+
+      <div class="auth-footer">
+        New to JetSetGo? <a href="signup.html">Create your account</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up — JetSetGo</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">✈ JetSetGo</a>
+  <div class="nav-links">
+    <button class="theme-toggle" id="theme-toggle" title="Toggle theme">🌙</button>
+  </div>
+</nav>
+
+<div class="auth-page">
+  <div class="auth-container">
+    <!-- Sidebar -->
+    <div class="auth-sidebar">
+      <div class="logo-auth">✈ JetSetGo</div>
+      <h2>Start Your Journey</h2>
+      <p>Join millions of happy travelers. Create an account to get exclusive deals, manage bookings and split fares with friends.</p>
+      <span class="plane-icon">✈</span>
+    </div>
+
+    <!-- Form -->
+    <div class="auth-form-panel">
+      <h2>Create Account</h2>
+      <p class="subtitle">Already have an account? <a href="login.html">Sign in →</a></p>
+
+      <form class="auth-form" id="signup-form" novalidate>
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" class="form-control" id="signup-name"
+            placeholder="John Doe" autocomplete="name" />
+          <span class="form-error hidden" id="signup-name-err">⚠ Please enter your full name.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" class="form-control" id="signup-email"
+            placeholder="you@example.com" autocomplete="email" />
+          <span class="form-error hidden" id="signup-email-err">⚠ Please enter a valid email.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Phone Number</label>
+          <input type="tel" class="form-control" id="signup-phone"
+            placeholder="+91 9876543210" autocomplete="tel" />
+          <span class="form-error hidden" id="signup-phone-err">⚠ Please enter a valid phone number.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <div style="position:relative;">
+            <input type="password" class="form-control" id="signup-password"
+              placeholder="Minimum 6 characters" autocomplete="new-password" />
+            <button type="button" id="toggle-pw" style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-muted);">👁</button>
+          </div>
+          <!-- Password strength -->
+          <div class="pw-strength">
+            <div class="pw-bars">
+              <div class="pw-bar" id="pw-bar-1"></div>
+              <div class="pw-bar" id="pw-bar-2"></div>
+              <div class="pw-bar" id="pw-bar-3"></div>
+              <div class="pw-bar" id="pw-bar-4"></div>
+            </div>
+            <div class="pw-label" id="pw-label"></div>
+          </div>
+          <span class="form-error hidden" id="signup-pw-err">⚠ Password must be at least 6 characters.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Confirm Password</label>
+          <input type="password" class="form-control" id="signup-confirm"
+            placeholder="Re-enter password" autocomplete="new-password" />
+          <span class="form-error hidden" id="signup-confirm-err">⚠ Passwords do not match.</span>
+        </div>
+
+        <div class="form-error hidden text-center" id="signup-general-err"></div>
+
+        <button type="submit" class="btn btn-primary btn-lg w-full" id="signup-submit">
+          Create Account ✈
+        </button>
+      </form>
+
+      <div class="auth-footer">
+        Already have an account? <a href="login.html">Sign in here</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="script.js"></script>
+</body>
+</html>

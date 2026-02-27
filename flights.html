@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flight Results — JetSetGo</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">✈ JetSetGo</a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="mybookings.html" class="nav-link" id="nav-bookings">My Bookings</a>
+    <a href="login.html" class="nav-link" id="nav-login">Login</a>
+    <button class="nav-link" id="nav-logout" style="background:none;border:none;display:none;">Logout</button>
+    <button class="theme-toggle" id="theme-toggle" title="Toggle theme">🌙</button>
+  </div>
+</nav>
+
+<div class="results-page">
+  <!-- Back + header -->
+  <div class="results-header fade-in">
+    <div>
+      <a href="index.html" class="btn btn-ghost btn-sm" style="margin-bottom:0.75rem;display:inline-flex;">← Modify Search</a>
+      <h2 id="results-title">Available Flights</h2>
+      <p class="results-meta" id="results-meta">Loading...</p>
+    </div>
+    <div class="badge badge-accent" id="results-count" style="font-size:1rem;padding:0.5rem 1.25rem;">— flights</div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-bar fade-in">
+    <button class="filter-chip active" data-filter="all">All</button>
+    <button class="filter-chip" data-filter="Economy">Economy</button>
+    <button class="filter-chip" data-filter="Business">Business</button>
+    <button class="filter-chip" data-filter="First Class">First Class</button>
+    <button class="filter-chip" data-sort="price">💰 Sort by Price</button>
+    <button class="filter-chip" data-sort="duration">⏱ Sort by Duration</button>
+    <button class="filter-chip" data-sort="departure">🕐 Sort by Departure</button>
+  </div>
+
+  <!-- Flight List -->
+  <div id="flight-list" class="flight-list">
+    <div class="loader-wrap">
+      <div class="spinner"></div>
+      <p class="loader-text">Finding the best flights for you…</p>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="script.js"></script>
+</body>
+</html>

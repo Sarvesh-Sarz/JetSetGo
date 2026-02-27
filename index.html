@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JetSetGo — Premium Flight Booking</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ─── Navigation ───────────────────────────────────────────── -->
+<nav id="main-nav">
+  <a href="index.html" class="nav-logo">✈ JetSetGo</a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link active always-show">Home</a>
+    <a href="mybookings.html" class="nav-link always-show" id="nav-bookings">My Bookings</a>
+    <a href="login.html" class="nav-link" id="nav-login">Login</a>
+    <button class="nav-link" id="nav-logout" style="background:none;border:none;display:none;">Logout</button>
+    <button class="theme-toggle" id="theme-toggle" title="Toggle theme">🌙</button>
+  </div>
+</nav>
+
+<!-- ─── Hero ─────────────────────────────────────────────────── -->
+<section class="hero-section">
+  <div class="hero-bg"></div>
+  <div class="hero-orb hero-orb-1"></div>
+  <div class="hero-orb hero-orb-2"></div>
+
+  <div class="hero-text fade-in">
+    <div class="eyebrow">✦ Premium Flights Worldwide</div>
+    <h1>Fly Beyond<br><span>Your Limits</span></h1>
+    <p>Discover thousands of routes, compare prices instantly and book with confidence.</p>
+  </div>
+
+  <!-- Search Card -->
+  <div class="search-card fade-in fade-in-delay-1">
+    <div class="trip-tabs">
+      <button class="trip-tab active" data-trip="roundtrip">⇌ Round Trip</button>
+      <button class="trip-tab" data-trip="oneway">→ One Way</button>
+      <button class="trip-tab" data-trip="multicity">⊕ Multi-City</button>
+    </div>
+
+    <!-- Row 1: From, To, Departure, Return, Passengers -->
+    <div class="search-row1">
+      <div class="form-group">
+        <label class="form-label">From</label>
+        <div class="input-icon-wrap">
+          <span class="input-icon">🛫</span>
+          <select class="form-control" id="search-from">
+            <option value="">Select Departure City</option>
+            <option value="MAA">Chennai (MAA)</option>
+            <option value="BLR">Bengaluru (BLR)</option>
+            <option value="BOM">Mumbai (BOM)</option>
+            <option value="DEL">Delhi (DEL)</option>
+            <option value="HYD">Hyderabad (HYD)</option>
+            <option value="CCU">Kolkata (CCU)</option>
+            <option value="AMD">Ahmedabad (AMD)</option>
+            <option value="COK">Kochi (COK)</option>
+            <option value="PNQ">Pune (PNQ)</option>
+            <option value="GOI">Goa (GOI)</option>
+            <option value="DXB">Dubai (DXB)</option>
+            <option value="LHR">London (LHR)</option>
+            <option value="JFK">New York (JFK)</option>
+            <option value="SIN">Singapore (SIN)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">To</label>
+        <div class="input-icon-wrap">
+          <span class="input-icon">🛬</span>
+          <select class="form-control" id="search-to">
+            <option value="">Select Destination City</option>
+            <option value="MAA">Chennai (MAA)</option>
+            <option value="BLR">Bengaluru (BLR)</option>
+            <option value="BOM">Mumbai (BOM)</option>
+            <option value="DEL">Delhi (DEL)</option>
+            <option value="HYD">Hyderabad (HYD)</option>
+            <option value="CCU">Kolkata (CCU)</option>
+            <option value="AMD">Ahmedabad (AMD)</option>
+            <option value="COK">Kochi (COK)</option>
+            <option value="PNQ">Pune (PNQ)</option>
+            <option value="GOI">Goa (GOI)</option>
+            <option value="DXB">Dubai (DXB)</option>
+            <option value="LHR">London (LHR)</option>
+            <option value="JFK">New York (JFK)</option>
+            <option value="SIN">Singapore (SIN)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Departure Date</label>
+        <div class="input-icon-wrap">
+          <span class="input-icon">📅</span>
+          <input type="date" class="form-control" id="search-depart" />
+        </div>
+      </div>
+      <div class="form-group" id="return-date-group">
+        <label class="form-label">Return Date</label>
+        <div class="input-icon-wrap">
+          <span class="input-icon">📅</span>
+          <input type="date" class="form-control" id="search-return" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Passengers</label>
+        <div class="input-icon-wrap">
+          <span class="input-icon">👥</span>
+          <select class="form-control" id="search-passengers">
+            <option value="1">1 Passenger</option>
+            <option value="2">2 Passengers</option>
+            <option value="3">3 Passengers</option>
+            <option value="4">4 Passengers</option>
+            <option value="5">5 Passengers</option>
+            <option value="6">6 Passengers</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2: Class only (left-aligned, 20% width) -->
+    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; margin-bottom:1.5rem;">
+      <div class="form-group">
+        <label class="form-label">Class</label>
+        <div class="input-icon-wrap">
+          <span class="input-icon">💺</span>
+          <select class="form-control" id="search-class">
+            <option value="Economy">Economy</option>
+            <option value="Business">Business</option>
+            <option value="First Class">First Class</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <button class="search-btn" id="search-btn">
+      <span>🔍</span> Search Flights
+    </button>
+  </div>
+</section>
+
+<!-- ─── Features ─────────────────────────────────────────────── -->
+<div class="features-section">
+  <div class="feature-card fade-in">
+    <div class="feature-icon">🔒</div>
+    <h3>Secure Booking</h3>
+    <p>256-bit SSL encryption protects every transaction you make.</p>
+  </div>
+  <div class="feature-card fade-in fade-in-delay-1">
+    <div class="feature-icon">💳</div>
+    <h3>Split Fare</h3>
+    <p>Travel with friends? Split the fare seamlessly among passengers.</p>
+  </div>
+  <div class="feature-card fade-in fade-in-delay-2">
+    <div class="feature-icon">📱</div>
+    <h3>Instant E-Ticket</h3>
+    <p>Get your tickets instantly delivered after booking confirmation.</p>
+  </div>
+  <div class="feature-card fade-in fade-in-delay-3">
+    <div class="feature-icon">🌍</div>
+    <h3>1000+ Routes</h3>
+    <p>Explore flights across 50 countries with 40+ airline partners.</p>
+  </div>
+</div>
+
+<!-- ─── Toast Container ───────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<script src="script.js"></script>
+</body>
+</html>

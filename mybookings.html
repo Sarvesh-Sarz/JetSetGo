@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Bookings — JetSetGo</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<nav>
+  <a href="index.html" class="nav-logo">✈ JetSetGo</a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="mybookings.html" class="nav-link active always-show">My Bookings</a>
+    <a href="login.html" class="nav-link" id="nav-login">Login</a>
+    <button class="nav-link" id="nav-logout" style="background:none;border:none;display:none;">Logout</button>
+    <button class="theme-toggle" id="theme-toggle" title="Toggle theme">🌙</button>
+  </div>
+</nav>
+
+<div class="mybookings-page">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+    <h2>✈ My Bookings</h2>
+    <a href="index.html" class="btn btn-primary">+ Book New Flight</a>
+  </div>
+
+  <!-- Filter tabs -->
+  <div class="filters-bar" style="margin-bottom:1.5rem;" id="booking-filters">
+    <button class="filter-chip active" data-status="all">All</button>
+    <button class="filter-chip" data-status="Fully Paid">✅ Fully Paid</button>
+    <button class="filter-chip" data-status="Partially Paid">⏳ Partially Paid</button>
+    <button class="filter-chip" data-status="Pending">🔴 Pending</button>
+  </div>
+
+  <!-- Bookings list -->
+  <div id="bookings-list" class="booking-list">
+    <!-- Filled by JS -->
+  </div>
+</div>
+
+<!-- ─── Split Pay OTP Modal ────────────────────────────────────── -->
+<div class="modal-overlay hidden" id="split-otp-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🔐 Verify & Pay</h3>
+      <button class="btn btn-ghost btn-sm" id="close-split-otp">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="otp-container" id="split-otp-body">
+        <!-- Step 1: verify phone -->
+        <div id="otp-step-phone">
+          <p class="otp-title">Verify Your Identity</p>
+          <p class="otp-subtitle">Enter your email address to receive a 6-digit OTP for payment.</p>
+          <div class="form-group" style="text-align:left;margin-bottom:1rem;">
+            <label class="form-label">Your Email Address</label>
+            <input type="email" class="form-control" id="otp-verify-phone" placeholder="you@example.com" />
+            <span class="form-error hidden" id="otp-phone-err">⚠ Please enter a valid email address.</span>
+          </div>
+          <button class="btn btn-primary w-full" id="otp-send-btn">📧 Send OTP →</button>
+        </div>
+
+        <!-- Step 2: enter OTP -->
+        <div id="otp-step-verify" class="hidden">
+          <p class="otp-title">Enter OTP</p>
+          <p class="otp-subtitle" id="otp-sent-to">A 6-digit code was sent to your number.</p>
+          <div class="otp-inputs" id="otp-digits">
+            <input type="text" maxlength="1" class="otp-digit" />
+            <input type="text" maxlength="1" class="otp-digit" />
+            <input type="text" maxlength="1" class="otp-digit" />
+            <input type="text" maxlength="1" class="otp-digit" />
+            <input type="text" maxlength="1" class="otp-digit" />
+            <input type="text" maxlength="1" class="otp-digit" />
+          </div>
+          <div class="otp-timer">Code expires in <span id="otp-timer-count">5:00</span></div>
+          <span class="form-error hidden text-center" id="otp-err">⚠ Incorrect OTP. Please try again.</span>
+          <button class="btn btn-primary w-full" id="otp-verify-btn">Verify OTP</button>
+          <button class="btn btn-ghost w-full mt-1" id="otp-resend-btn">Resend OTP</button>
+        </div>
+
+        <!-- Step 3: payment -->
+        <div id="otp-step-payment" class="hidden">
+          <div class="card-visual" style="text-align:left;">
+            <div class="card-brand">JetSetGo Pay</div>
+            <div class="card-number">•••• •••• •••• 4242</div>
+            <div class="card-meta"><span>Valid Thru 12/28</span><span>VISA</span></div>
+          </div>
+          <p style="text-align:center;font-weight:700;font-size:1.1rem;margin-bottom:0.5rem;">
+            Amount Due: <span id="otp-pay-amount" style="color:var(--accent);">₹0</span>
+          </p>
+          <p style="text-align:center;font-size:0.82rem;color:var(--text-muted);margin-bottom:1.5rem;">
+            Your share of the split fare
+          </p>
+          <button class="btn btn-primary btn-lg w-full" id="otp-pay-btn">💳 Pay Now</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+<script src="script.js"></script>
+</body>
+</html>
