@@ -6,6 +6,10 @@
   <title>My Bookings — JetSetGo</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <!-- Firebase SDKs — must load before script.js -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -32,6 +36,7 @@
     <button class="filter-chip" data-status="Fully Paid">✅ Fully Paid</button>
     <button class="filter-chip" data-status="Partially Paid">⏳ Partially Paid</button>
     <button class="filter-chip" data-status="Pending">🔴 Pending</button>
+    <button class="filter-chip" data-status="Cancelled">❌ Cancelled</button>
   </div>
 
   <!-- Bookings list -->
@@ -100,6 +105,7 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="script.js"></script>
+
+  <script src="script.js"></script>
 </body>
 </html>
