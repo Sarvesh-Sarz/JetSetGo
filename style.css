@@ -211,6 +211,18 @@ h1,h2,h3,h4,h5 { font-family:'Syne',sans-serif; font-weight:700; line-height:1.1
 }
 .form-control::placeholder { color:var(--text-muted); opacity:0.7; }
 .form-control.error { border-color:var(--danger); }
+
+/* ── Fix browser autofill white background in dark mode ── */
+.form-control:-webkit-autofill,
+.form-control:-webkit-autofill:hover,
+.form-control:-webkit-autofill:focus,
+.form-control:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface2) inset !important;
+  -webkit-text-fill-color: var(--text) !important;
+  caret-color: var(--text);
+  border-color: var(--border);
+  transition: background-color 9999s ease-in-out 0s;
+}
 .form-error {
   color:var(--danger); font-size:0.78rem; font-weight:500;
   display:flex; align-items:center; gap:0.3rem;
@@ -789,22 +801,26 @@ nav {
 .otp-title { font-size:1.3rem; margin-bottom:0.5rem; }
 .otp-subtitle { color:var(--text-muted); font-size:0.9rem; margin-bottom:2rem; }
 .otp-inputs {
-  display:flex; justify-content:center; gap:0.5rem;
+  display:flex; justify-content:center; gap:0.4rem;
   margin-bottom:1.5rem; flex-wrap:nowrap;
 }
-.otp-digit {
-  width:44px; height:52px;
+.otp-digit,
+.booking-otp-digit,
+.sp-otp-digit {
+  width:36px; height:42px;
   flex-shrink:0;
-  text-align:center; font-size:1.4rem; font-weight:700;
+  text-align:center; font-size:1.15rem; font-weight:700;
   border:2px solid var(--border);
-  border-radius:var(--radius-sm);
+  border-radius:10px;
   background:var(--surface2); color:var(--text);
   outline:none;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
-.otp-digit:focus {
+.otp-digit:focus,
+.booking-otp-digit:focus,
+.sp-otp-digit:focus {
   border-color:var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-glow);
+  box-shadow: 0 0 0 3px var(--accent-glow);
 }
 .otp-timer {
   font-size:0.85rem; color:var(--text-muted); margin-bottom:1rem;
@@ -1020,7 +1036,7 @@ nav {
   .modal { max-width:100%; border-radius:var(--radius) var(--radius) 0 0; }
   .modal-overlay { align-items:flex-end; padding:0; }
 
-  .otp-digit { width:38px; height:46px; font-size:1.1rem; }
+  .otp-digit, .booking-otp-digit, .sp-otp-digit { width:32px; height:38px; font-size:1rem; }
 }
 
 /* ─── Passenger split link page (standalone) ─────────────────── */
@@ -1193,3 +1209,45 @@ select option { background:var(--surface); color:var(--text); }
 
 /* ── text-center ────────────────────────────────────────── */
 .text-center { text-align: center; }
+
+/* ── Selected flight card (round trip) ──────────────────── */
+.flight-card.selected {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent), var(--card-shadow-hover);
+  background: var(--surface2);
+}
+
+/* ── Section divider between outbound/return ────────────── */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.section-divider span {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--accent);
+  background: var(--surface2);
+  padding: 0.4rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* ── Cancel button ──────────────────────────────────────── */
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  border: none;
+}
+.btn-danger:hover { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+
+/* ── Cancelled booking card ─────────────────────────────── */
+.booking-cancelled {
+  opacity: 0.65;
+  border-color: rgba(239,68,68,.3) !important;
+}
+.booking-cancelled .booking-route { text-decoration: line-through; }
