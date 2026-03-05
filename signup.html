@@ -6,6 +6,10 @@
   <title>Sign Up — JetSetGo</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <!-- Firebase SDKs — must load before script.js -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -55,10 +59,11 @@
 
         <div class="form-group">
           <label class="form-label">Password</label>
-          <div style="position:relative;">
+          <div style="position:relative; display:flex; align-items:center;">
             <input type="password" class="form-control" id="signup-password"
-              placeholder="Minimum 6 characters" autocomplete="new-password" />
-            <button type="button" id="toggle-pw" style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-muted);">👁</button>
+              placeholder="Minimum 6 characters" autocomplete="new-password" style="padding-right:2.8rem; width:100%;" />
+            <button type="button" id="toggle-pw" title="Show/hide password"
+              style="position:absolute;right:0.75rem;background:none;border:none;cursor:pointer;font-size:1.1rem;color:var(--text-muted);padding:0;line-height:1;z-index:2;">👁</button>
           </div>
           <!-- Password strength -->
           <div class="pw-strength">
@@ -95,6 +100,7 @@
 </div>
 
 <div id="toast-container"></div>
-<script src="script.js"></script>
+
+  <script src="script.js"></script>
 </body>
 </html>
