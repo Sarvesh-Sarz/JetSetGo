@@ -8,6 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <!-- Firebase SDKs — must load before script.js -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -38,9 +42,8 @@
   <!-- Search Card -->
   <div class="search-card fade-in fade-in-delay-1">
     <div class="trip-tabs">
-      <button class="trip-tab active" data-trip="roundtrip">⇌ Round Trip</button>
-      <button class="trip-tab" data-trip="oneway">→ One Way</button>
-      <button class="trip-tab" data-trip="multicity">⊕ Multi-City</button>
+      <button class="trip-tab" data-trip="roundtrip">⇌ Round Trip</button>
+      <button class="trip-tab active" data-trip="oneway">→ One Way</button>
     </div>
 
     <!-- Row 1: From, To, Departure, Return, Passengers -->
@@ -51,20 +54,42 @@
           <span class="input-icon">🛫</span>
           <select class="form-control" id="search-from">
             <option value="">Select Departure City</option>
-            <option value="MAA">Chennai (MAA)</option>
-            <option value="BLR">Bengaluru (BLR)</option>
-            <option value="BOM">Mumbai (BOM)</option>
             <option value="DEL">Delhi (DEL)</option>
+            <option value="BOM">Mumbai (BOM)</option>
+            <option value="BLR">Bengaluru (BLR)</option>
+            <option value="MAA">Chennai (MAA)</option>
             <option value="HYD">Hyderabad (HYD)</option>
             <option value="CCU">Kolkata (CCU)</option>
-            <option value="AMD">Ahmedabad (AMD)</option>
             <option value="COK">Kochi (COK)</option>
-            <option value="PNQ">Pune (PNQ)</option>
             <option value="GOI">Goa (GOI)</option>
-            <option value="DXB">Dubai (DXB)</option>
-            <option value="LHR">London (LHR)</option>
-            <option value="JFK">New York (JFK)</option>
-            <option value="SIN">Singapore (SIN)</option>
+            <option value="JAI">Jaipur (JAI)</option>
+            <option value="AMD">Ahmedabad (AMD)</option>
+            <option value="LKO">Lucknow (LKO)</option>
+            <option value="PNQ">Pune (PNQ)</option>
+            <option value="ATQ">Amritsar (ATQ)</option>
+            <option value="VTZ">Visakhapatnam (VTZ)</option>
+            <option value="GAU">Guwahati (GAU)</option>
+            <option value="PAT">Patna (PAT)</option>
+            <option value="RPR">Raipur (RPR)</option>
+            <option value="BBI">Bhubaneswar (BBI)</option>
+            <option value="IXR">Ranchi (IXR)</option>
+            <option value="BHO">Bhopal (BHO)</option>
+            <option value="IXC">Chandigarh (IXC)</option>
+            <option value="DED">Dehradun (DED)</option>
+            <option value="SXR">Srinagar (SXR)</option>
+            <option value="IXJ">Jammu (IXJ)</option>
+            <option value="IXL">Leh (IXL)</option>
+            <option value="IXA">Agartala (IXA)</option>
+            <option value="IMF">Imphal (IMF)</option>
+            <option value="DMU">Dimapur (DMU)</option>
+            <option value="AJL">Aizawl (AJL)</option>
+            <option value="SHL">Shillong (SHL)</option>
+            <option value="PYG">Pakyong (PYG)</option>
+            <option value="IXZ">Port Blair (IXZ)</option>
+            <option value="AGX">Agatti (AGX)</option>
+            <option value="KUU">Kullu (KUU)</option>
+            <option value="PNY">Puducherry (PNY)</option>
+            <option value="HGI">Pasighat (HGI)</option>
           </select>
         </div>
       </div>
@@ -74,20 +99,42 @@
           <span class="input-icon">🛬</span>
           <select class="form-control" id="search-to">
             <option value="">Select Destination City</option>
-            <option value="MAA">Chennai (MAA)</option>
-            <option value="BLR">Bengaluru (BLR)</option>
-            <option value="BOM">Mumbai (BOM)</option>
             <option value="DEL">Delhi (DEL)</option>
+            <option value="BOM">Mumbai (BOM)</option>
+            <option value="BLR">Bengaluru (BLR)</option>
+            <option value="MAA">Chennai (MAA)</option>
             <option value="HYD">Hyderabad (HYD)</option>
             <option value="CCU">Kolkata (CCU)</option>
-            <option value="AMD">Ahmedabad (AMD)</option>
             <option value="COK">Kochi (COK)</option>
-            <option value="PNQ">Pune (PNQ)</option>
             <option value="GOI">Goa (GOI)</option>
-            <option value="DXB">Dubai (DXB)</option>
-            <option value="LHR">London (LHR)</option>
-            <option value="JFK">New York (JFK)</option>
-            <option value="SIN">Singapore (SIN)</option>
+            <option value="JAI">Jaipur (JAI)</option>
+            <option value="AMD">Ahmedabad (AMD)</option>
+            <option value="LKO">Lucknow (LKO)</option>
+            <option value="PNQ">Pune (PNQ)</option>
+            <option value="ATQ">Amritsar (ATQ)</option>
+            <option value="VTZ">Visakhapatnam (VTZ)</option>
+            <option value="GAU">Guwahati (GAU)</option>
+            <option value="PAT">Patna (PAT)</option>
+            <option value="RPR">Raipur (RPR)</option>
+            <option value="BBI">Bhubaneswar (BBI)</option>
+            <option value="IXR">Ranchi (IXR)</option>
+            <option value="BHO">Bhopal (BHO)</option>
+            <option value="IXC">Chandigarh (IXC)</option>
+            <option value="DED">Dehradun (DED)</option>
+            <option value="SXR">Srinagar (SXR)</option>
+            <option value="IXJ">Jammu (IXJ)</option>
+            <option value="IXL">Leh (IXL)</option>
+            <option value="IXA">Agartala (IXA)</option>
+            <option value="IMF">Imphal (IMF)</option>
+            <option value="DMU">Dimapur (DMU)</option>
+            <option value="AJL">Aizawl (AJL)</option>
+            <option value="SHL">Shillong (SHL)</option>
+            <option value="PYG">Pakyong (PYG)</option>
+            <option value="IXZ">Port Blair (IXZ)</option>
+            <option value="AGX">Agatti (AGX)</option>
+            <option value="KUU">Kullu (KUU)</option>
+            <option value="PNY">Puducherry (PNY)</option>
+            <option value="HGI">Pasighat (HGI)</option>
           </select>
         </div>
       </div>
@@ -98,7 +145,7 @@
           <input type="date" class="form-control" id="search-depart" />
         </div>
       </div>
-      <div class="form-group" id="return-date-group">
+      <div class="form-group" id="return-date-group" style="display:none">
         <label class="form-label">Return Date</label>
         <div class="input-icon-wrap">
           <span class="input-icon">📅</span>
@@ -169,6 +216,7 @@
 <!-- ─── Toast Container ───────────────────────────────────────── -->
 <div id="toast-container"></div>
 
-<script src="script.js"></script>
+
+  <script src="script.js"></script>
 </body>
 </html>
