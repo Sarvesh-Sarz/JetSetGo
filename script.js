@@ -1,4 +1,15 @@
+/**
+ * JetSetGo — Premium Flight Booking Application
+ * script.js — Firebase + EmailJS powered
+ */
+
 "use strict";
+
+/* ═══════════════════════════════════════════════════════════════
+   1. FIREBASE CONFIG
+   Setup: console.firebase.google.com → New Project → Web App
+   → Authentication (Email/Password) → Firestore Database (test mode)
+═══════════════════════════════════════════════════════════════ */
 
 const FIREBASE_CONFIG = {
   apiKey:            "YOUR_API_KEY",
@@ -16,38 +27,23 @@ let _firebaseLoading = false;
 function loadFirebase() {
   return new Promise((resolve) => {
     if (_firebaseReady) { resolve(true); return; }
-    if (_firebaseLoading) {
-      const t = setInterval(() => { if (_firebaseReady) { clearInterval(t); resolve(true); } }, 100);
-      return;
+    // Firebase SDK scripts are already in the HTML <head> — just initialise
+    try {
+      if (typeof firebase === "undefined") {
+        console.error("Firebase SDK not found");
+        resolve(false); return;
+      }
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      auth = firebase.auth();
+      db   = firebase.firestore();
+      _firebaseReady = true;
+      resolve(true);
+    } catch (e) {
+      console.error("Firebase init error:", e.code, e.message);
+      resolve(false);
     }
-    _firebaseLoading = true;
-    const scripts = [
-      "https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js",
-      "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js",
-      "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js",
-    ];
-    let loaded = 0;
-    scripts.forEach((src) => {
-      const s = document.createElement("script");
-      s.src = src;
-      s.onload = () => {
-        loaded++;
-        if (loaded === scripts.length) {
-          try {
-            firebase.initializeApp(FIREBASE_CONFIG);
-            auth = firebase.auth();
-            db   = firebase.firestore();
-            _firebaseReady = true;
-            resolve(true);
-          } catch (e) { console.error("Firebase init:", e); resolve(false); }
-        }
-      };
-      s.onerror = () => { loaded++; if (loaded === scripts.length) resolve(false); };
-      document.head.appendChild(s);
-    });
   });
 }
-
 function isFirebaseConfigured() {
   return FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
 }
@@ -58,9 +54,12 @@ function isFirebaseConfigured() {
    Template variables: {{to_email}}, {{to_name}}, {{otp_code}}
 ═══════════════════════════════════════════════════════════════ */
 
+
+
 const EMAILJS_PUBLIC_KEY   = "YOUR_PUBLIC_KEY_HERE";
 const EMAILJS_SERVICE_ID   = "YOUR_SERVICE_ID_HERE";
 const EMAILJS_OTP_TEMPLATE = "YOUR_OTP_TEMPLATE_ID";
+
 
 let _emailJsReady = false;
 
@@ -244,18 +243,25 @@ function initLoginPage() {
     const loginTimeout = setTimeout(() => {
       btn.disabled = false; btn.textContent = "Sign In ✈";
       const errEl = document.getElementById("login-general-err");
-      errEl.textContent = "⚠ Request timed out. Check your Firebase config and internet connection.";
+      errEl.textContent = "⚠ Request timed out. Firebase may not be loading — check your API keys and internet connection.";
       errEl.classList.remove("hidden");
+      console.error("Login timed out after 10s");
     }, 10000);
 
     if (isFirebaseConfigured()) {
+      console.log("Firebase configured, loading...");
       const firebaseReady = await loadFirebase();
-      if (!firebaseReady) {
+      console.log("Firebase ready:", firebaseReady, "auth:", !!auth);
+      if (!firebaseReady || !auth) {
+        clearTimeout(loginTimeout);
         btn.disabled = false; btn.textContent = "Sign In ✈";
-        showToast("⚠ Could not connect to server. Check your Firebase config.", "error", 6000);
+        const errEl = document.getElementById("login-general-err");
+        errEl.textContent = "⚠ Could not connect to Firebase. Check your internet connection.";
+        errEl.classList.remove("hidden");
         return;
       }
       try {
+        console.log("Attempting signIn for:", email);
         const cred = await auth.signInWithEmailAndPassword(email, password);
         // Build profile from Firebase Auth data (no Firestore read needed)
         let profile = { uid: cred.user.uid, name: cred.user.displayName || email.split("@")[0], email };
@@ -281,13 +287,16 @@ function initLoginPage() {
         btn.disabled = false; btn.textContent = "Sign In ✈";
         const errEl = document.getElementById("login-general-err");
         const msgs = {
-          "auth/user-not-found":    "⚠ No account with this email.",
-          "auth/wrong-password":    "⚠ Incorrect password.",
-          "auth/invalid-credential":"⚠ Invalid email or password.",
-          "auth/too-many-requests": "⚠ Too many attempts. Try later.",
+          "auth/user-not-found":       "⚠ No account found with this email. Please sign up first.",
+          "auth/wrong-password":       "⚠ Incorrect password. Please try again.",
+          "auth/invalid-credential":   "⚠ Invalid email or password.",
+          "auth/invalid-email":        "⚠ Please enter a valid email address.",
+          "auth/too-many-requests":    "⚠ Too many failed attempts. Please wait a few minutes.",
           "auth/network-request-failed": "⚠ Network error. Check your connection.",
+          "auth/operation-not-allowed":  "⚠ Email/Password login not enabled. Go to Firebase Console → Authentication → Sign-in method → Enable Email/Password.",
+          "auth/invalid-api-key":        "⚠ Invalid Firebase API key — check script.js.",
         };
-        errEl.textContent = msgs[err.code] || `⚠ Login failed: ${err.message} (code: ${err.code})`;
+        errEl.textContent = msgs[err.code] || `⚠ Login failed: ${err.message} (${err.code})`;
         errEl.classList.remove("hidden");
         console.error("Login error:", err.code, err.message);
       }
@@ -353,18 +362,32 @@ function initSignupPage() {
       errEl.classList.remove("hidden");
     }, 10000);
 
+    const errEl = document.getElementById("signup-general-err");
+
+    if (!isFirebaseConfigured()) {
+      clearTimeout(signupTimeout);
+      btn.disabled = false; btn.textContent = "Create Account ✈";
+      errEl.textContent = "⚠ Firebase not configured. Open script.js and replace YOUR_API_KEY with your real Firebase config.";
+      errEl.classList.remove("hidden");
+      return;
+    }
+
     if (isFirebaseConfigured()) {
+      console.log("Firebase configured, loading for signup...");
       const firebaseReady = await loadFirebase();
-      if (!firebaseReady) {
+      console.log("Firebase ready:", firebaseReady, "auth:", !!auth);
+      if (!firebaseReady || !auth) {
         clearTimeout(signupTimeout);
         btn.disabled = false; btn.textContent = "Create Account ✈";
-        showToast("⚠ Could not connect to server. Check your Firebase config.", "error", 6000);
+        errEl.textContent = "⚠ Could not connect to Firebase. Check your internet connection.";
+        errEl.classList.remove("hidden");
         return;
       }
       try {
+        console.log("Attempting createUser for:", email);
         const cred    = await auth.createUserWithEmailAndPassword(email, password);
         const profile = { uid: cred.user.uid, name, email, phone };
-        // Save to Firestore but don't block signup if it fails
+        // Save to Firestore — non-blocking
         db.collection("users").doc(cred.user.uid).set(profile).catch(e => {
           console.warn("Firestore profile save failed (non-critical):", e.message);
         });
@@ -372,19 +395,20 @@ function initSignupPage() {
         localStorage.setItem("jsg_user_profile", JSON.stringify(profile));
         _currentUserProfile = profile;
         showToast("Account created! Welcome aboard ✈", "success");
-        setTimeout(() => { window.location.href = "index.html"; }, 800);
+        setTimeout(() => { window.location.href = sessionStorage.getItem("jsg_redirect") || "index.html"; }, 800);
       } catch (err) {
         clearTimeout(signupTimeout);
         btn.disabled = false; btn.textContent = "Create Account ✈";
-        const errEl = document.getElementById("signup-general-err");
         const msgs = {
-          "auth/email-already-in-use": "⚠ Account already exists with this email.",
-          "auth/weak-password":        "⚠ Password must be at least 6 characters.",
-          "auth/network-request-failed": "⚠ Network error. Check your connection.",
-          "auth/configuration-not-found": "⚠ Firebase not configured correctly. Check your config keys.",
-          "auth/invalid-api-key":         "⚠ Invalid Firebase API key.",
+          "auth/email-already-in-use":    "⚠ An account already exists with this email. Try logging in instead.",
+          "auth/weak-password":           "⚠ Password must be at least 6 characters.",
+          "auth/network-request-failed":  "⚠ Network error. Check your connection.",
+          "auth/configuration-not-found": "⚠ Firebase not configured correctly — check your API keys in script.js.",
+          "auth/invalid-api-key":         "⚠ Invalid Firebase API key — check script.js lines 14–20.",
+          "auth/operation-not-allowed":   "⚠ Email/Password sign-in is not enabled. Go to Firebase Console → Authentication → Sign-in method → Enable Email/Password.",
+          "auth/admin-restricted-operation": "⚠ Email/Password sign-in is not enabled in Firebase Console.",
         };
-        errEl.textContent = msgs[err.code] || `⚠ Signup failed: ${err.message} (code: ${err.code})`;
+        errEl.textContent = msgs[err.code] || `⚠ Signup failed: ${err.message} (${err.code})`;
         errEl.classList.remove("hidden");
         console.error("Signup error:", err.code, err.message);
       }
@@ -447,13 +471,24 @@ function initHomePage() {
     const from       = document.getElementById("search-from").value;
     const to         = document.getElementById("search-to").value;
     const depart     = departInput?.value;
+    const returnDate = document.getElementById("search-return")?.value;
     const passengers = document.getElementById("search-passengers").value;
     const cls        = document.getElementById("search-class").value;
+    const activeTab  = document.querySelector(".trip-tab.active")?.dataset.trip || "oneway";
+
     if (!from)       { showToast("Select a departure city.", "warning"); return; }
     if (!to)         { showToast("Select a destination city.", "warning"); return; }
     if (from === to) { showToast("From and To cannot be the same.", "warning"); return; }
     if (!depart)     { showToast("Select a departure date.", "warning"); return; }
-    window.location.href = `flights.html?${new URLSearchParams({from,to,depart,passengers,class:cls})}`;
+    if (activeTab === "roundtrip" && !returnDate) {
+      showToast("Select a return date.", "warning"); return;
+    }
+    if (activeTab === "roundtrip" && returnDate <= depart) {
+      showToast("Return date must be after departure date.", "warning"); return;
+    }
+    const params = { from, to, depart, passengers, class: cls, trip: activeTab };
+    if (activeTab === "roundtrip") params.returnDate = returnDate;
+    window.location.href = `flights.html?${new URLSearchParams(params)}`;
   });
 }
 
@@ -461,84 +496,505 @@ function initHomePage() {
    10. FLIGHT DATA & RESULTS
 ═══════════════════════════════════════════════════════════════ */
 
-const AIRLINES = [
-  {name:"IndiGo",code:"6E"},{name:"Air India",code:"AI"},{name:"SpiceJet",code:"SG"},
-  {name:"Vistara",code:"UK"},{name:"Emirates",code:"EK"},{name:"Singapore Airlines",code:"SQ"},
-  {name:"GoFirst",code:"G8"},{name:"AirAsia India",code:"I5"},
-];
-const BASE_PRICES = { Economy:{min:2500,max:18000}, Business:{min:12000,max:60000}, "First Class":{min:30000,max:120000} };
+// ── Real domestic flight schedule ─────────────────────────────
+// Each route has fixed flights with real-ish timings and durations
+// Prices vary by class multiplier
 
-function generateFlights(from, to, travelClass, passengers) {
-  return Array.from({length: Math.floor(Math.random()*5)+5}, () => {
-    const a   = AIRLINES[Math.floor(Math.random()*AIRLINES.length)];
-    const dH  = Math.floor(Math.random()*18)+5, dM = [0,15,30,45][Math.floor(Math.random()*4)];
-    const dur = Math.floor(Math.random()*180)+60;
-    const arr = dH*60+dM+dur;
-    const r   = BASE_PRICES[travelClass]||BASE_PRICES.Economy;
-    const px  = Math.floor(Math.random()*(r.max-r.min)+r.min);
-    return {
-      id:generateId(), airline:a.name, airlineCode:a.code,
-      flightNumber:`${a.code}${Math.floor(Math.random()*9000)+1000}`,
-      from, to,
-      depTime:formatTime(dH,dM), arrTime:formatTime(Math.floor(arr/60)%24,arr%60),
-      depHour:dH*60+dM, durationMins:dur, duration:formatDuration(dur),
-      price:px, priceTotal:px*passengers, travelClass, passengers,
-      stops: Math.random()>0.65?1:0,
-    };
-  }).sort((a,b)=>a.price-b.price);
+
+// ═══════════════════════════════════════════════════════
+//  FLIGHTS DATABASE  (from flights.js dataset)
+// ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+//  FLIGHTS DATABASE  — from flights.js dataset (your friend's data)
+//  All domestic routes, real flight numbers, real fares
+// ═══════════════════════════════════════════════════════════════
+const FLIGHTS_DB = [
+  // ── DEL → BOM ─────────────────────────────────────────────
+  { flight_id:"6E-204",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"BOM", dep:"06:00", arr:"08:10", dur:130, fares:{economy:4200,  premium_economy:7800,  business:14500}, meals:true  },
+  { flight_id:"AI-101",  airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"DEL", destination:"BOM", dep:"08:30", arr:"10:45", dur:135, fares:{economy:4800,  premium_economy:9000,  business:17000}, meals:true  },
+  { flight_id:"UK-945",  airline:"Vistara",     code:"UK", aircraft:"Boeing 737-800",     origin:"DEL", destination:"BOM", dep:"14:15", arr:"16:30", dur:135, fares:{economy:5200,  premium_economy:9500,  business:18000}, meals:true  },
+  { flight_id:"SG-101",  airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"DEL", destination:"BOM", dep:"19:45", arr:"22:00", dur:135, fares:{economy:3800,  premium_economy:null,  business:null  }, meals:true  },
+  { flight_id:"QP-2301", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"DEL", destination:"BOM", dep:"22:30", arr:"00:40", dur:130, fares:{economy:3500,  premium_economy:null,  business:null  }, meals:true  },
+  // ── DEL → BLR ─────────────────────────────────────────────
+  { flight_id:"6E-302",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320neo",     origin:"DEL", destination:"BLR", dep:"05:45", arr:"08:30", dur:165, fares:{economy:5500,  premium_economy:10000, business:18500}, meals:true  },
+  { flight_id:"AI-503",  airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"DEL", destination:"BLR", dep:"11:00", arr:"13:50", dur:170, fares:{economy:6000,  premium_economy:11000, business:20000}, meals:true  },
+  { flight_id:"QP-1401", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"DEL", destination:"BLR", dep:"17:30", arr:"20:20", dur:170, fares:{economy:4900,  premium_economy:null,  business:null  }, meals:true  },
+  // ── DEL → HYD ─────────────────────────────────────────────
+  { flight_id:"6E-406",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"HYD", dep:"07:10", arr:"09:40", dur:150, fares:{economy:4500,  premium_economy:8500,  business:null  }, meals:true  },
+  { flight_id:"UK-821",  airline:"Vistara",     code:"UK", aircraft:"Airbus A320neo",     origin:"DEL", destination:"HYD", dep:"15:20", arr:"17:55", dur:155, fares:{economy:5100,  premium_economy:9200,  business:17500}, meals:true  },
+  // ── DEL → MAA ─────────────────────────────────────────────
+  { flight_id:"6E-544",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A321",        origin:"DEL", destination:"MAA", dep:"06:30", arr:"09:20", dur:170, fares:{economy:5600,  premium_economy:10200, business:null  }, meals:true  },
+  { flight_id:"AI-431",  airline:"Air India",   code:"AI", aircraft:"Boeing 787",         origin:"DEL", destination:"MAA", dep:"13:45", arr:"16:40", dur:175, fares:{economy:6200,  premium_economy:11500, business:21000}, meals:true  },
+  // ── DEL → CCU ─────────────────────────────────────────────
+  { flight_id:"6E-712",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320neo",     origin:"DEL", destination:"CCU", dep:"06:15", arr:"08:40", dur:145, fares:{economy:4300,  premium_economy:8000,  business:null  }, meals:true  },
+  { flight_id:"AI-231",  airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"DEL", destination:"CCU", dep:"10:30", arr:"13:00", dur:150, fares:{economy:4900,  premium_economy:9000,  business:16500}, meals:true  },
+  { flight_id:"SG-1301", airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"DEL", destination:"CCU", dep:"21:00", arr:"23:25", dur:145, fares:{economy:4100,  premium_economy:null,  business:null  }, meals:true  },
+  // ── DEL → COK ─────────────────────────────────────────────
+  { flight_id:"6E-811",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"COK", dep:"08:00", arr:"11:10", dur:190, fares:{economy:6500,  premium_economy:11800, business:null  }, meals:true  },
+  { flight_id:"UK-2211", airline:"Vistara",     code:"UK", aircraft:"Airbus A321",        origin:"DEL", destination:"COK", dep:"20:00", arr:"23:15", dur:195, fares:{economy:6700,  premium_economy:12200, business:22000}, meals:true  },
+  // ── DEL → GOI ─────────────────────────────────────────────
+  { flight_id:"UK-611",  airline:"Vistara",     code:"UK", aircraft:"Airbus A320neo",     origin:"DEL", destination:"GOI", dep:"07:30", arr:"09:55", dur:145, fares:{economy:4700,  premium_economy:8800,  business:16000}, meals:true  },
+  { flight_id:"SG-201",  airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-900",     origin:"DEL", destination:"GOI", dep:"16:45", arr:"19:15", dur:150, fares:{economy:3900,  premium_economy:null,  business:null  }, meals:true  },
+  // ── DEL → JAI ─────────────────────────────────────────────
+  { flight_id:"6E-2201", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"DEL", destination:"JAI", dep:"07:00", arr:"08:05", dur:65,  fares:{economy:2500,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"SG-301",  airline:"SpiceJet",    code:"SG", aircraft:"Bombardier Q400",    origin:"DEL", destination:"JAI", dep:"14:30", arr:"15:35", dur:65,  fares:{economy:2300,  premium_economy:null,  business:null  }, meals:false },
+  // ── DEL → AMD ─────────────────────────────────────────────
+  { flight_id:"6E-905",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"AMD", dep:"09:00", arr:"10:30", dur:90,  fares:{economy:3200,  premium_economy:6000,  business:null  }, meals:true  },
+  { flight_id:"UK-731",  airline:"Vistara",     code:"UK", aircraft:"Airbus A320neo",     origin:"DEL", destination:"AMD", dep:"18:00", arr:"19:35", dur:95,  fares:{economy:3600,  premium_economy:6800,  business:13000}, meals:true  },
+  { flight_id:"QP-2401", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"DEL", destination:"AMD", dep:"07:00", arr:"08:35", dur:95,  fares:{economy:3000,  premium_economy:null,  business:null  }, meals:false },
+  // ── DEL → LKO ─────────────────────────────────────────────
+  { flight_id:"6E-2411", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"DEL", destination:"LKO", dep:"08:15", arr:"09:25", dur:70,  fares:{economy:2700,  premium_economy:null,  business:null  }, meals:false },
+  // ── DEL → PNQ ─────────────────────────────────────────────
+  { flight_id:"QP-1601", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"DEL", destination:"PNQ", dep:"10:15", arr:"12:30", dur:135, fares:{economy:4400,  premium_economy:null,  business:null  }, meals:true  },
+  { flight_id:"AI-1711", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"DEL", destination:"PNQ", dep:"09:30", arr:"11:45", dur:135, fares:{economy:4600,  premium_economy:8600,  business:16200}, meals:true  },
+  // ── DEL → VTZ ─────────────────────────────────────────────
+  { flight_id:"AI-3001", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"DEL", destination:"VTZ", dep:"09:00", arr:"11:45", dur:165, fares:{economy:5300,  premium_economy:9800,  business:18000}, meals:true  },
+  // ── DEL → GAU ─────────────────────────────────────────────
+  { flight_id:"6E-5011", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"GAU", dep:"06:00", arr:"08:20", dur:140, fares:{economy:4800,  premium_economy:9000,  business:null  }, meals:true  },
+  // ── DEL → PAT ─────────────────────────────────────────────
+  { flight_id:"6E-5021", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"PAT", dep:"07:30", arr:"09:00", dur:90,  fares:{economy:3200,  premium_economy:6000,  business:null  }, meals:true  },
+  // ── DEL → RPR ─────────────────────────────────────────────
+  { flight_id:"6E-5031", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"RPR", dep:"08:00", arr:"10:00", dur:120, fares:{economy:3800,  premium_economy:7100,  business:null  }, meals:true  },
+  // ── DEL → BBI ─────────────────────────────────────────────
+  { flight_id:"6E-5041", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"BBI", dep:"06:30", arr:"08:40", dur:130, fares:{economy:4400,  premium_economy:8200,  business:null  }, meals:true  },
+  // ── DEL → IXR ─────────────────────────────────────────────
+  { flight_id:"6E-5051", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"IXR", dep:"07:00", arr:"09:00", dur:120, fares:{economy:3700,  premium_economy:7000,  business:null  }, meals:true  },
+  // ── DEL → BHO ─────────────────────────────────────────────
+  { flight_id:"6E-5061", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"BHO", dep:"08:30", arr:"10:00", dur:90,  fares:{economy:3100,  premium_economy:5800,  business:null  }, meals:true  },
+  // ── DEL → ATQ ─────────────────────────────────────────────
+  { flight_id:"6E-5071", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"ATQ", dep:"06:00", arr:"07:05", dur:65,  fares:{economy:2500,  premium_economy:null,  business:null  }, meals:false },
+  // ── DEL → IXC ─────────────────────────────────────────────
+  { flight_id:"6E-5081", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"DEL", destination:"IXC", dep:"07:00", arr:"07:55", dur:55,  fares:{economy:2400,  premium_economy:null,  business:null  }, meals:false },
+  // ── DEL → DED ─────────────────────────────────────────────
+  { flight_id:"6E-5091", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"DEL", destination:"DED", dep:"07:30", arr:"08:20", dur:50,  fares:{economy:2400,  premium_economy:null,  business:null  }, meals:false },
+  // ── DEL → SXR ─────────────────────────────────────────────
+  { flight_id:"6E-5111", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"SXR", dep:"06:30", arr:"07:45", dur:75,  fares:{economy:3200,  premium_economy:6000,  business:null  }, meals:false },
+  // ── DEL → IXJ ─────────────────────────────────────────────
+  { flight_id:"AI-3111", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"DEL", destination:"IXJ", dep:"10:00", arr:"11:10", dur:70,  fares:{economy:2900,  premium_economy:5500,  business:null  }, meals:false },
+  // ── DEL → IXL ─────────────────────────────────────────────
+  { flight_id:"6E-5121", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"DEL", destination:"IXL", dep:"06:00", arr:"07:35", dur:95,  fares:{economy:5500,  premium_economy:null,  business:null  }, meals:false },
+  // ── DEL → IXA ─────────────────────────────────────────────
+  { flight_id:"AI-3131", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"DEL", destination:"IXA", dep:"11:00", arr:"13:30", dur:150, fares:{economy:5200,  premium_economy:9600,  business:null  }, meals:true  },
+  // ── DEL → IMF ─────────────────────────────────────────────
+  { flight_id:"AI-3141", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"DEL", destination:"IMF", dep:"07:00", arr:"09:40", dur:160, fares:{economy:5500,  premium_economy:null,  business:null  }, meals:true  },
+  // ── DEL → KUU ─────────────────────────────────────────────
+  { flight_id:"9H-101",  airline:"Alliance Air", code:"9H", aircraft:"ATR 42-500",        origin:"DEL", destination:"KUU", dep:"09:00", arr:"10:10", dur:70,  fares:{economy:3500,  premium_economy:null,  business:null  }, meals:false },
+  // ── BOM → BLR ─────────────────────────────────────────────
+  { flight_id:"6E-501",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320neo",     origin:"BOM", destination:"BLR", dep:"06:00", arr:"07:30", dur:90,  fares:{economy:3400,  premium_economy:6500,  business:null  }, meals:true  },
+  { flight_id:"AI-619",  airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"BOM", destination:"BLR", dep:"09:30", arr:"11:05", dur:95,  fares:{economy:3900,  premium_economy:7200,  business:14000}, meals:true  },
+  { flight_id:"UK-831",  airline:"Vistara",     code:"UK", aircraft:"Airbus A320",        origin:"BOM", destination:"BLR", dep:"18:45", arr:"20:20", dur:95,  fares:{economy:4200,  premium_economy:7800,  business:15000}, meals:true  },
+  // ── BOM → HYD ─────────────────────────────────────────────
+  { flight_id:"6E-603",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"BOM", destination:"HYD", dep:"07:00", arr:"08:30", dur:90,  fares:{economy:3100,  premium_economy:5800,  business:null  }, meals:true  },
+  { flight_id:"SG-411",  airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"BOM", destination:"HYD", dep:"14:20", arr:"15:55", dur:95,  fares:{economy:2800,  premium_economy:null,  business:null  }, meals:true  },
+  // ── BOM → MAA ─────────────────────────────────────────────
+  { flight_id:"6E-722",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320neo",     origin:"BOM", destination:"MAA", dep:"08:30", arr:"10:30", dur:120, fares:{economy:4000,  premium_economy:7500,  business:null  }, meals:true  },
+  { flight_id:"AI-541",  airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"BOM", destination:"MAA", dep:"17:00", arr:"19:05", dur:125, fares:{economy:4500,  premium_economy:8500,  business:16000}, meals:true  },
+  // ── BOM → CCU ─────────────────────────────────────────────
+  { flight_id:"6E-834",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A321",        origin:"BOM", destination:"CCU", dep:"06:45", arr:"09:45", dur:180, fares:{economy:5800,  premium_economy:10500, business:null  }, meals:true  },
+  { flight_id:"UK-2511", airline:"Vistara",     code:"UK", aircraft:"Airbus A321",        origin:"BOM", destination:"CCU", dep:"18:00", arr:"21:00", dur:180, fares:{economy:6000,  premium_economy:11000, business:20000}, meals:true  },
+  // ── BOM → GOI ─────────────────────────────────────────────
+  { flight_id:"6E-2501", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"BOM", destination:"GOI", dep:"10:00", arr:"11:10", dur:70,  fares:{economy:2600,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"QP-1701", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"BOM", destination:"GOI", dep:"16:00", arr:"17:15", dur:75,  fares:{economy:2900,  premium_economy:null,  business:null  }, meals:false },
+  // ── BOM → COK ─────────────────────────────────────────────
+  { flight_id:"AI-661",  airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"BOM", destination:"COK", dep:"09:15", arr:"11:15", dur:120, fares:{economy:3900,  premium_economy:7400,  business:14500}, meals:true  },
+  { flight_id:"6E-921",  airline:"IndiGo",      code:"6E", aircraft:"Airbus A320neo",     origin:"BOM", destination:"COK", dep:"18:30", arr:"20:35", dur:125, fares:{economy:3600,  premium_economy:6800,  business:null  }, meals:true  },
+  // ── BOM → AMD ─────────────────────────────────────────────
+  { flight_id:"6E-2611", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"BOM", destination:"AMD", dep:"07:45", arr:"09:00", dur:75,  fares:{economy:2700,  premium_economy:null,  business:null  }, meals:false },
+  // ── BOM → PNQ ─────────────────────────────────────────────
+  { flight_id:"AI-761",  airline:"Air India",   code:"AI", aircraft:"ATR 72-600",         origin:"BOM", destination:"PNQ", dep:"08:00", arr:"08:55", dur:55,  fares:{economy:2500,  premium_economy:null,  business:null  }, meals:false },
+  // ── BOM → JAI ─────────────────────────────────────────────
+  { flight_id:"6E-3911", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"BOM", destination:"JAI", dep:"09:45", arr:"11:40", dur:115, fares:{economy:3700,  premium_economy:6900,  business:null  }, meals:true  },
+  { flight_id:"UK-1611", airline:"Vistara",     code:"UK", aircraft:"Airbus A320neo",     origin:"BOM", destination:"JAI", dep:"18:30", arr:"20:25", dur:115, fares:{economy:4100,  premium_economy:7600,  business:14500}, meals:true  },
+  // ── BOM → LKO ─────────────────────────────────────────────
+  { flight_id:"6E-3611", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"BOM", destination:"LKO", dep:"10:00", arr:"12:05", dur:125, fares:{economy:4000,  premium_economy:7400,  business:null  }, meals:true  },
+  // ── BOM → ATQ ─────────────────────────────────────────────
+  { flight_id:"UK-2601", airline:"Vistara",     code:"UK", aircraft:"Airbus A320",        origin:"BOM", destination:"ATQ", dep:"11:00", arr:"13:15", dur:135, fares:{economy:4500,  premium_economy:8400,  business:16000}, meals:true  },
+  // ── BOM → IXC ─────────────────────────────────────────────
+  { flight_id:"AI-3081", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"BOM", destination:"IXC", dep:"10:00", arr:"12:15", dur:135, fares:{economy:4400,  premium_economy:8200,  business:15500}, meals:true  },
+  // ── BOM → DED ─────────────────────────────────────────────
+  { flight_id:"SG-1501", airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"BOM", destination:"DED", dep:"09:00", arr:"11:10", dur:130, fares:{economy:4300,  premium_economy:null,  business:null  }, meals:true  },
+  // ── BOM → BHO ─────────────────────────────────────────────
+  { flight_id:"AI-3061", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"BOM", destination:"BHO", dep:"17:00", arr:"18:30", dur:90,  fares:{economy:3200,  premium_economy:6000,  business:null  }, meals:true  },
+  // ── BOM → RPR ─────────────────────────────────────────────
+  { flight_id:"SG-1401", airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"BOM", destination:"RPR", dep:"13:00", arr:"15:00", dur:120, fares:{economy:3600,  premium_economy:null,  business:null  }, meals:true  },
+  // ── BLR → HYD ─────────────────────────────────────────────
+  { flight_id:"6E-1012", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"BLR", destination:"HYD", dep:"07:00", arr:"08:10", dur:70,  fares:{economy:2600,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"UK-541",  airline:"Vistara",     code:"UK", aircraft:"Airbus A320",        origin:"BLR", destination:"HYD", dep:"18:00", arr:"19:15", dur:75,  fares:{economy:3000,  premium_economy:5500,  business:11000}, meals:false },
+  // ── BLR → MAA ─────────────────────────────────────────────
+  { flight_id:"6E-2101", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"BLR", destination:"MAA", dep:"06:30", arr:"07:35", dur:65,  fares:{economy:2400,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"AI-811",  airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"BLR", destination:"MAA", dep:"17:30", arr:"18:40", dur:70,  fares:{economy:2800,  premium_economy:5200,  business:10000}, meals:false },
+  // ── BLR → CCU ─────────────────────────────────────────────
+  { flight_id:"6E-1123", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"BLR", destination:"CCU", dep:"09:00", arr:"11:40", dur:160, fares:{economy:5200,  premium_economy:9600,  business:null  }, meals:true  },
+  // ── BLR → COK ─────────────────────────────────────────────
+  { flight_id:"6E-2211", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"BLR", destination:"COK", dep:"11:00", arr:"12:10", dur:70,  fares:{economy:2700,  premium_economy:null,  business:null  }, meals:false },
+  // ── BLR → GOI ─────────────────────────────────────────────
+  { flight_id:"SG-501",  airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"BLR", destination:"GOI", dep:"13:00", arr:"14:20", dur:80,  fares:{economy:3000,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"AI-2611", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"GOI", destination:"BLR", dep:"16:30", arr:"17:55", dur:85,  fares:{economy:3100,  premium_economy:5900,  business:11500}, meals:false },
+  // ── BLR → AMD ─────────────────────────────────────────────
+  { flight_id:"6E-1811", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"BLR", destination:"AMD", dep:"06:30", arr:"08:30", dur:120, fares:{economy:3800,  premium_economy:7100,  business:null  }, meals:true  },
+  { flight_id:"SG-901",  airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"BLR", destination:"AMD", dep:"08:00", arr:"10:00", dur:120, fares:{economy:3600,  premium_economy:null,  business:null  }, meals:true  },
+  // ── BLR → LKO ─────────────────────────────────────────────
+  { flight_id:"SG-1001", airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"BLR", destination:"LKO", dep:"07:30", arr:"10:30", dur:180, fares:{economy:5600,  premium_economy:null,  business:null  }, meals:true  },
+  { flight_id:"AI-1311", airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"LKO", destination:"BLR", dep:"11:00", arr:"14:00", dur:180, fares:{economy:5800,  premium_economy:10600, business:19500}, meals:true  },
+  // ── BLR → PNY ─────────────────────────────────────────────
+  { flight_id:"6E-5221", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"BLR", destination:"PNY", dep:"08:30", arr:"09:30", dur:60,  fares:{economy:2500,  premium_economy:null,  business:null  }, meals:false },
+  // ── HYD → MAA ─────────────────────────────────────────────
+  { flight_id:"6E-1311", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"HYD", destination:"MAA", dep:"08:00", arr:"09:15", dur:75,  fares:{economy:2800,  premium_economy:null,  business:null  }, meals:false },
+  // ── HYD → CCU ─────────────────────────────────────────────
+  { flight_id:"AI-921",  airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"HYD", destination:"CCU", dep:"10:00", arr:"12:30", dur:150, fares:{economy:4200,  premium_economy:7900,  business:15000}, meals:true  },
+  // ── HYD → COK ─────────────────────────────────────────────
+  { flight_id:"6E-1421", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"HYD", destination:"COK", dep:"14:30", arr:"16:15", dur:105, fares:{economy:3600,  premium_economy:6800,  business:null  }, meals:true  },
+  { flight_id:"AI-1911", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"COK", destination:"HYD", dep:"15:00", arr:"16:45", dur:105, fares:{economy:3600,  premium_economy:6700,  business:13000}, meals:true  },
+  // ── HYD → GOI ─────────────────────────────────────────────
+  { flight_id:"SG-601",  airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"HYD", destination:"GOI", dep:"11:30", arr:"13:00", dur:90,  fares:{economy:3100,  premium_economy:null,  business:null  }, meals:true  },
+  // ── HYD → AMD ─────────────────────────────────────────────
+  { flight_id:"6E-3511", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"HYD", destination:"AMD", dep:"13:30", arr:"15:15", dur:105, fares:{economy:3400,  premium_economy:6300,  business:null  }, meals:true  },
+  { flight_id:"UK-1211", airline:"Vistara",     code:"UK", aircraft:"Airbus A320neo",     origin:"AMD", destination:"HYD", dep:"13:00", arr:"14:45", dur:105, fares:{economy:3500,  premium_economy:6500,  business:12500}, meals:true  },
+  // ── HYD → PNQ ─────────────────────────────────────────────
+  { flight_id:"6E-2811", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"PNQ", destination:"HYD", dep:"07:00", arr:"08:20", dur:80,  fares:{economy:2900,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"SG-811",  airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"PNQ", destination:"HYD", dep:"19:00", arr:"20:25", dur:85,  fares:{economy:2700,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"AI-2211", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"HYD", destination:"PNQ", dep:"17:00", arr:"18:25", dur:85,  fares:{economy:2900,  premium_economy:5500,  business:10500}, meals:false },
+  // ── HYD → VTZ ─────────────────────────────────────────────
+  { flight_id:"6E-5001", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"VTZ", destination:"HYD", dep:"07:00", arr:"08:10", dur:70,  fares:{economy:2800,  premium_economy:null,  business:null  }, meals:false },
+  // ── MAA → CCU ─────────────────────────────────────────────
+  { flight_id:"AI-1031", airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"MAA", destination:"CCU", dep:"07:30", arr:"09:45", dur:135, fares:{economy:4500,  premium_economy:8500,  business:16000}, meals:true  },
+  { flight_id:"6E-1511", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"MAA", destination:"CCU", dep:"14:00", arr:"16:20", dur:140, fares:{economy:4200,  premium_economy:7800,  business:null  }, meals:true  },
+  // ── MAA → COK ─────────────────────────────────────────────
+  { flight_id:"6E-2311", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"MAA", destination:"COK", dep:"08:30", arr:"09:40", dur:70,  fares:{economy:2600,  premium_economy:null,  business:null  }, meals:false },
+  // ── MAA → AMD ─────────────────────────────────────────────
+  { flight_id:"UK-1811", airline:"Vistara",     code:"UK", aircraft:"Airbus A321",        origin:"MAA", destination:"AMD", dep:"07:30", arr:"10:00", dur:150, fares:{economy:5100,  premium_economy:9400,  business:17500}, meals:true  },
+  { flight_id:"6E-3711", airline:"IndiGo",      code:"6E", aircraft:"Airbus A321",        origin:"AMD", destination:"MAA", dep:"12:00", arr:"14:30", dur:150, fares:{economy:4900,  premium_economy:9100,  business:null  }, meals:true  },
+  // ── MAA → JAI ─────────────────────────────────────────────
+  { flight_id:"AI-2411", airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"MAA", destination:"JAI", dep:"07:00", arr:"10:00", dur:180, fares:{economy:5700,  premium_economy:10500, business:19500}, meals:true  },
+  { flight_id:"6E-3811", airline:"IndiGo",      code:"6E", aircraft:"Airbus A321",        origin:"JAI", destination:"MAA", dep:"06:00", arr:"09:00", dur:180, fares:{economy:5700,  premium_economy:10400, business:null  }, meals:true  },
+  // ── MAA → LKO ─────────────────────────────────────────────
+  { flight_id:"UK-2111", airline:"Vistara",     code:"UK", aircraft:"Airbus A321",        origin:"LKO", destination:"MAA", dep:"08:30", arr:"11:30", dur:180, fares:{economy:5900,  premium_economy:10800, business:19800}, meals:true  },
+  { flight_id:"6E-4011", airline:"IndiGo",      code:"6E", aircraft:"Airbus A321",        origin:"MAA", destination:"LKO", dep:"14:30", arr:"17:30", dur:180, fares:{economy:5800,  premium_economy:10600, business:null  }, meals:true  },
+  // ── MAA → IXZ ─────────────────────────────────────────────
+  { flight_id:"6E-5201", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"MAA", destination:"IXZ", dep:"06:00", arr:"08:00", dur:120, fares:{economy:5500,  premium_economy:null,  business:null  }, meals:true  },
+  // ── CCU → GOI ─────────────────────────────────────────────
+  { flight_id:"6E-1621", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"CCU", destination:"GOI", dep:"10:00", arr:"13:00", dur:180, fares:{economy:5900,  premium_economy:10800, business:null  }, meals:true  },
+  { flight_id:"6E-4111", airline:"IndiGo",      code:"6E", aircraft:"Airbus A321",        origin:"GOI", destination:"CCU", dep:"06:30", arr:"09:30", dur:180, fares:{economy:5900,  premium_economy:10800, business:null  }, meals:true  },
+  // ── CCU → LKO ─────────────────────────────────────────────
+  { flight_id:"AI-1141", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"CCU", destination:"LKO", dep:"09:00", arr:"11:00", dur:120, fares:{economy:3800,  premium_economy:7200,  business:13500}, meals:true  },
+  { flight_id:"QP-2101", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"CCU", destination:"LKO", dep:"16:00", arr:"18:00", dur:120, fares:{economy:3700,  premium_economy:null,  business:null  }, meals:true  },
+  // ── CCU → AMD ─────────────────────────────────────────────
+  { flight_id:"AI-2011", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"CCU", destination:"AMD", dep:"09:30", arr:"12:45", dur:195, fares:{economy:6100,  premium_economy:11200, business:20500}, meals:true  },
+  { flight_id:"6E-1911", airline:"IndiGo",      code:"6E", aircraft:"Airbus A321",        origin:"AMD", destination:"CCU", dep:"08:00", arr:"11:15", dur:195, fares:{economy:6200,  premium_economy:11400, business:null  }, meals:true  },
+  // ── CCU → MAA ─────────────────────────────────────────────
+  { flight_id:"QP-1901", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"CCU", destination:"MAA", dep:"11:30", arr:"14:00", dur:150, fares:{economy:4400,  premium_economy:null,  business:null  }, meals:true  },
+  // ── CCU → IXZ ─────────────────────────────────────────────
+  { flight_id:"AI-3201", airline:"Air India",   code:"AI", aircraft:"Boeing 737-800",     origin:"CCU", destination:"IXZ", dep:"08:00", arr:"10:20", dur:140, fares:{economy:5800,  premium_economy:10500, business:null  }, meals:true  },
+  // ── CCU → GAU ─────────────────────────────────────────────
+  { flight_id:"AI-3011", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"CCU", destination:"GAU", dep:"10:00", arr:"11:10", dur:70,  fares:{economy:2700,  premium_economy:null,  business:null  }, meals:false },
+  // ── CCU → PAT ─────────────────────────────────────────────
+  { flight_id:"AI-3021", airline:"Air India",   code:"AI", aircraft:"ATR 72-600",         origin:"CCU", destination:"PAT", dep:"14:00", arr:"15:20", dur:80,  fares:{economy:2900,  premium_economy:null,  business:null  }, meals:false },
+  // ── CCU → BBI ─────────────────────────────────────────────
+  { flight_id:"AI-3041", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"CCU", destination:"BBI", dep:"09:30", arr:"10:40", dur:70,  fares:{economy:2600,  premium_economy:null,  business:null  }, meals:false },
+  // ── CCU → IXR ─────────────────────────────────────────────
+  { flight_id:"AI-3051", airline:"Air India",   code:"AI", aircraft:"ATR 72-600",         origin:"CCU", destination:"IXR", dep:"13:00", arr:"14:10", dur:70,  fares:{economy:2600,  premium_economy:null,  business:null  }, meals:false },
+  // ── CCU → IXA ─────────────────────────────────────────────
+  { flight_id:"6E-5131", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"CCU", destination:"IXA", dep:"08:00", arr:"09:05", dur:65,  fares:{economy:2600,  premium_economy:null,  business:null  }, meals:false },
+  // ── CCU → IMF ─────────────────────────────────────────────
+  { flight_id:"6E-5141", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"CCU", destination:"IMF", dep:"09:00", arr:"10:20", dur:80,  fares:{economy:2900,  premium_economy:null,  business:null  }, meals:false },
+  // ── CCU → DMU ─────────────────────────────────────────────
+  { flight_id:"6E-5151", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"CCU", destination:"DMU", dep:"10:00", arr:"11:20", dur:80,  fares:{economy:3000,  premium_economy:null,  business:null  }, meals:false },
+  // ── CCU → AJL ─────────────────────────────────────────────
+  { flight_id:"6E-5161", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"CCU", destination:"AJL", dep:"08:30", arr:"10:00", dur:90,  fares:{economy:3100,  premium_economy:null,  business:null  }, meals:true  },
+  // ── CCU → SHL ─────────────────────────────────────────────
+  { flight_id:"6E-5171", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"CCU", destination:"SHL", dep:"09:30", arr:"10:40", dur:70,  fares:{economy:2700,  premium_economy:null,  business:null  }, meals:false },
+  // ── CCU → PYG ─────────────────────────────────────────────
+  { flight_id:"6E-5191", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"CCU", destination:"PYG", dep:"09:00", arr:"10:20", dur:80,  fares:{economy:3200,  premium_economy:null,  business:null  }, meals:false },
+  // ── GOI ─────────────────────────────────────────────────────
+  { flight_id:"SG-701",  airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"GOI", destination:"COK", dep:"11:00", arr:"12:20", dur:80,  fares:{economy:3000,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"6E-2711", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"GOI", destination:"PNQ", dep:"15:00", arr:"16:10", dur:70,  fares:{economy:2500,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"SG-1101", airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"GOI", destination:"AMD", dep:"13:30", arr:"15:15", dur:105, fares:{economy:3300,  premium_economy:null,  business:null  }, meals:true  },
+  // ── AMD ─────────────────────────────────────────────────────
+  { flight_id:"6E-4311", airline:"IndiGo",      code:"6E", aircraft:"ATR 72-600",         origin:"AMD", destination:"PNQ", dep:"10:00", arr:"11:20", dur:80,  fares:{economy:2900,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"SG-1201", airline:"SpiceJet",    code:"SG", aircraft:"Boeing 737-800",     origin:"AMD", destination:"LKO", dep:"11:30", arr:"13:30", dur:120, fares:{economy:3900,  premium_economy:null,  business:null  }, meals:true  },
+  // ── PNQ ─────────────────────────────────────────────────────
+  { flight_id:"UK-1411", airline:"Vistara",     code:"UK", aircraft:"Airbus A320",        origin:"PNQ", destination:"BLR", dep:"10:00", arr:"11:30", dur:90,  fares:{economy:3300,  premium_economy:6200,  business:12000}, meals:true  },
+  { flight_id:"6E-2921", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"PNQ", destination:"COK", dep:"12:30", arr:"14:30", dur:120, fares:{economy:3700,  premium_economy:7000,  business:null  }, meals:true  },
+  { flight_id:"QP-2001", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"PNQ", destination:"MAA", dep:"08:30", arr:"10:30", dur:120, fares:{economy:3700,  premium_economy:null,  business:null  }, meals:true  },
+  { flight_id:"QP-2201", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"PNQ", destination:"JAI", dep:"14:00", arr:"16:00", dur:120, fares:{economy:3200,  premium_economy:null,  business:null  }, meals:true  },
+  // ── LKO ─────────────────────────────────────────────────────
+  { flight_id:"6E-3011", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"LKO", destination:"BOM", dep:"06:00", arr:"08:10", dur:130, fares:{economy:4000,  premium_economy:7500,  business:null  }, meals:true  },
+  { flight_id:"6E-3111", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"LKO", destination:"HYD", dep:"16:00", arr:"18:30", dur:150, fares:{economy:4500,  premium_economy:8400,  business:null  }, meals:true  },
+  { flight_id:"6E-4211", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"LKO", destination:"JAI", dep:"09:00", arr:"10:30", dur:90,  fares:{economy:3100,  premium_economy:5800,  business:null  }, meals:false },
+  // ── JAI ─────────────────────────────────────────────────────
+  { flight_id:"6E-3211", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"JAI", destination:"BOM", dep:"07:00", arr:"08:50", dur:110, fares:{economy:3600,  premium_economy:6800,  business:null  }, meals:true  },
+  { flight_id:"QP-1801", airline:"Akasa Air",   code:"QP", aircraft:"Boeing 737 MAX 8",   origin:"JAI", destination:"BLR", dep:"10:00", arr:"12:30", dur:150, fares:{economy:4800,  premium_economy:null,  business:null  }, meals:true  },
+  { flight_id:"6E-3311", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"JAI", destination:"HYD", dep:"14:00", arr:"16:15", dur:135, fares:{economy:4100,  premium_economy:7700,  business:null  }, meals:true  },
+  // ── COK ─────────────────────────────────────────────────────
+  { flight_id:"AI-1511", airline:"Air India",   code:"AI", aircraft:"Airbus A321",        origin:"COK", destination:"CCU", dep:"08:30", arr:"11:30", dur:180, fares:{economy:5700,  premium_economy:10400, business:19000}, meals:true  },
+  { flight_id:"6E-3411", airline:"IndiGo",      code:"6E", aircraft:"Airbus A320",        origin:"COK", destination:"AMD", dep:"06:00", arr:"08:30", dur:150, fares:{economy:5000,  premium_economy:9200,  business:null  }, meals:true  },
+  { flight_id:"UK-2311", airline:"Vistara",     code:"UK", aircraft:"Airbus A321",        origin:"COK", destination:"LKO", dep:"10:30", arr:"13:30", dur:180, fares:{economy:6000,  premium_economy:11000, business:20200}, meals:true  },
+  { flight_id:"AI-3211", airline:"Air India",   code:"AI", aircraft:"ATR 72-600",         origin:"COK", destination:"AGX", dep:"08:00", arr:"09:05", dur:65,  fares:{economy:4500,  premium_economy:null,  business:null  }, meals:false },
+  // ── GAU ─────────────────────────────────────────────────────
+  { flight_id:"AI-3151", airline:"Air India",   code:"AI", aircraft:"ATR 72-600",         origin:"GAU", destination:"DMU", dep:"14:00", arr:"15:10", dur:70,  fares:{economy:2700,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"AI-3161", airline:"Air India",   code:"AI", aircraft:"ATR 72-600",         origin:"GAU", destination:"AJL", dep:"13:30", arr:"14:50", dur:80,  fares:{economy:2900,  premium_economy:null,  business:null  }, meals:false },
+  { flight_id:"AI-3181", airline:"Air India",   code:"AI", aircraft:"ATR 72-600",         origin:"GAU", destination:"HGI", dep:"08:00", arr:"09:10", dur:70,  fares:{economy:3500,  premium_economy:null,  business:null  }, meals:false },
+  // ── SXR ─────────────────────────────────────────────────────
+  { flight_id:"AI-3121", airline:"Air India",   code:"AI", aircraft:"Airbus A320",        origin:"SXR", destination:"IXL", dep:"13:00", arr:"14:00", dur:60,  fares:{economy:4500,  premium_economy:null,  business:null  }, meals:false },
+];
+
+// ── City names for display ──────────────────────────────────────
+const CITY_NAMES = {
+  DEL:"Delhi", BOM:"Mumbai", BLR:"Bengaluru", MAA:"Chennai",
+  HYD:"Hyderabad", CCU:"Kolkata", COK:"Kochi", GOI:"Goa",
+  JAI:"Jaipur", AMD:"Ahmedabad", LKO:"Lucknow", PNQ:"Pune",
+  VTZ:"Visakhapatnam", GAU:"Guwahati", PAT:"Patna", RPR:"Raipur",
+  BBI:"Bhubaneswar", IXR:"Ranchi", BHO:"Bhopal", ATQ:"Amritsar",
+  IXC:"Chandigarh", DED:"Dehradun", SXR:"Srinagar", IXJ:"Jammu",
+  IXL:"Leh", IXA:"Agartala", IMF:"Imphal", DMU:"Dimapur",
+  AJL:"Aizawl", SHL:"Shillong", HGI:"Pasighat", PYG:"Pakyong",
+  IXZ:"Port Blair", AGX:"Agatti", KUU:"Kullu", PNY:"Puducherry",
+};
+
+// ── Build route index ───────────────────────────────────────────
+const FLIGHTS_ROUTE_MAP = {};
+FLIGHTS_DB.forEach(f => {
+  const key = `${f.origin}-${f.destination}`;
+  if (!FLIGHTS_ROUTE_MAP[key]) FLIGHTS_ROUTE_MAP[key] = [];
+  FLIGHTS_ROUTE_MAP[key].push(f);
+});
+
+// ── Class multiplier for pricing ────────────────────────────────
+const CLASS_MULTIPLIER = { Economy:1, "Premium Economy":1.85, Business:3.2, "First Class":5.5 };
+
+// ═══════════════════════════════════════════════════════════════
+//  MEALS DATABASE  — from meals.js dataset
+// ═══════════════════════════════════════════════════════════════
+const MEALS_DB = [
+  // Vegetarian
+  { id:"MEAL-VEG-001", name:"Veg Biryani",                  cat:"🌿 Vegetarian", price:380, cal:520,  veg:true,  vegan:false, jain:false, gf:false, airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-VEG-002", name:"Paneer Butter Masala with Naan",cat:"🌿 Vegetarian", price:420, cal:610,  veg:true,  vegan:false, jain:false, gf:false, airlines:["Air India","Vistara"] },
+  { id:"MEAL-VEG-003", name:"Dal Tadka with Steamed Rice",   cat:"🌿 Vegetarian", price:320, cal:480,  veg:true,  vegan:true,  jain:false, gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-VEG-004", name:"Aloo Gobhi with Roti",          cat:"🌿 Vegetarian", price:290, cal:410,  veg:true,  vegan:true,  jain:false, gf:false, airlines:["IndiGo","SpiceJet","Akasa Air"] },
+  { id:"MEAL-VEG-005", name:"Veg Club Sandwich",             cat:"🌿 Vegetarian", price:260, cal:390,  veg:true,  vegan:false, jain:false, gf:false, airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-VEG-006", name:"Masala Upma",                   cat:"🌿 Vegetarian", price:230, cal:340,  veg:true,  vegan:true,  jain:false, gf:false, airlines:["IndiGo","Air India","Vistara"] },
+  { id:"MEAL-VEG-007", name:"Paneer Tikka Wrap",             cat:"🌿 Vegetarian", price:310, cal:440,  veg:true,  vegan:false, jain:false, gf:false, airlines:["IndiGo","Vistara","Akasa Air"] },
+  { id:"MEAL-VEG-008", name:"Jain Thali",                    cat:"🙏 Jain",       price:370, cal:530,  veg:true,  vegan:true,  jain:true,  gf:false, airlines:["Air India","Vistara"] },
+  { id:"MEAL-VEG-009", name:"Idli Sambar",                   cat:"🌿 Vegetarian", price:210, cal:310,  veg:true,  vegan:true,  jain:false, gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet"] },
+  // Non-Veg
+  { id:"MEAL-NON-001", name:"Chicken Biryani",               cat:"🍗 Non-Veg",    price:450, cal:620,  veg:false, vegan:false, jain:false, gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-NON-002", name:"Butter Chicken with Naan",      cat:"🍗 Non-Veg",    price:490, cal:680,  veg:false, vegan:false, jain:false, gf:false, airlines:["Air India","Vistara"] },
+  { id:"MEAL-NON-003", name:"Egg Bhurji with Toast",         cat:"🍗 Non-Veg",    price:270, cal:390,  veg:false, vegan:false, jain:false, gf:false, airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-NON-004", name:"Chicken Keema Wrap",            cat:"🍗 Non-Veg",    price:340, cal:470,  veg:false, vegan:false, jain:false, gf:false, airlines:["IndiGo","SpiceJet","Akasa Air"] },
+  { id:"MEAL-NON-005", name:"Mutton Rogan Josh with Rice",   cat:"🍗 Non-Veg",    price:580, cal:720,  veg:false, vegan:false, jain:false, gf:true,  airlines:["Air India","Vistara"] },
+  { id:"MEAL-NON-006", name:"Fish Curry with Steamed Rice",  cat:"🍗 Non-Veg",    price:520, cal:570,  veg:false, vegan:false, jain:false, gf:true,  airlines:["Air India","Vistara"] },
+  { id:"MEAL-NON-007", name:"Chicken Sandwich",              cat:"🍗 Non-Veg",    price:290, cal:420,  veg:false, vegan:false, jain:false, gf:false, airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  // Vegan
+  { id:"MEAL-VGN-001", name:"Mixed Fruit Bowl",              cat:"🌱 Vegan",      price:220, cal:180,  veg:true,  vegan:true,  jain:true,  gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-VGN-002", name:"Garden Veg Sandwich",           cat:"🌱 Vegan",      price:240, cal:320,  veg:true,  vegan:true,  jain:false, gf:false, airlines:["IndiGo","Vistara","Akasa Air"] },
+  { id:"MEAL-VGN-003", name:"Vegan Khichdi",                 cat:"🌱 Vegan",      price:270, cal:380,  veg:true,  vegan:true,  jain:false, gf:true,  airlines:["Air India","Vistara"] },
+  // Snacks
+  { id:"MEAL-SNK-001", name:"Masala Peanuts & Chips Combo",  cat:"🍿 Snack",      price:120, cal:310,  veg:true,  vegan:true,  jain:true,  gf:false, airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-SNK-002", name:"Cookies Pack (3 pcs)",          cat:"🍿 Snack",      price:100, cal:240,  veg:true,  vegan:false, jain:false, gf:false, airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-SNK-003", name:"Cup Noodles",                   cat:"🍿 Snack",      price:130, cal:290,  veg:false, vegan:false, jain:false, gf:false, airlines:["IndiGo","SpiceJet","Akasa Air"] },
+  // Beverages
+  { id:"MEAL-BEV-001", name:"Fresh Lime Soda",               cat:"🥤 Beverage",   price:90,  cal:45,   veg:true,  vegan:true,  jain:true,  gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-BEV-002", name:"Masala Chai",                   cat:"🍵 Beverage",   price:80,  cal:90,   veg:true,  vegan:false, jain:true,  gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-BEV-003", name:"Orange Juice (250ml)",          cat:"🥤 Beverage",   price:110, cal:110,  veg:true,  vegan:true,  jain:true,  gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-BEV-004", name:"Soft Drink Can (330ml)",        cat:"🥤 Beverage",   price:100, cal:140,  veg:true,  vegan:true,  jain:true,  gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  { id:"MEAL-BEV-005", name:"Bottled Water (500ml)",         cat:"🥤 Beverage",   price:60,  cal:0,    veg:true,  vegan:true,  jain:true,  gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air"] },
+  // Business Class
+  { id:"MEAL-BIZ-001", name:"Business Thali (Veg)",          cat:"👔 Business",   price:0,   cal:850,  veg:true,  vegan:false, jain:false, gf:false, airlines:["Air India","Vistara"] },
+  { id:"MEAL-BIZ-002", name:"Business Thali (Non-Veg)",      cat:"👔 Business",   price:0,   cal:920,  veg:false, vegan:false, jain:false, gf:false, airlines:["Air India","Vistara"] },
+  { id:"MEAL-BIZ-003", name:"Continental Breakfast Plate",   cat:"👔 Business",   price:0,   cal:680,  veg:false, vegan:false, jain:false, gf:false, airlines:["Air India","Vistara"] },
+  // No Meal
+  { id:"MEAL-NONE",    name:"No Meal",                       cat:"⛔ No Meal",    price:0,   cal:0,    veg:true,  vegan:true,  jain:true,  gf:true,  airlines:["IndiGo","Air India","Vistara","SpiceJet","Akasa Air","Alliance Air"] },
+];
+
+// Meal policy per airline
+const MEAL_POLICY = {
+  "IndiGo":     { economy:{complimentary:false, discount:15}, business:{complimentary:true} },
+  "Air India":  { economy:{complimentary:true,  items:1},     business:{complimentary:true} },
+  "Vistara":    { economy:{complimentary:true,  items:1},     business:{complimentary:true} },
+  "SpiceJet":   { economy:{complimentary:false, discount:10}, business:{complimentary:true} },
+  "Akasa Air":  { economy:{complimentary:false, discount:12}, business:{complimentary:true} },
+  "Alliance Air":{ economy:{complimentary:false, discount:0}, business:{complimentary:false} },
+};
+
+function getMealsForFlight(airlineName, travelClass, mealsAvailable) {
+  if (!mealsAvailable) return [MEALS_DB.find(m => m.id === "MEAL-NONE")];
+  const isBusinessComp = travelClass === "Business" || travelClass === "First Class";
+  return MEALS_DB.filter(m => {
+    if (!m.airlines.includes(airlineName) && m.id !== "MEAL-NONE") return false;
+    if (m.cat === "👔 Business") return isBusinessComp;
+    return true;
+  });
 }
 
+function generateFlights(from, to, travelClass, passengers) {
+  const classKey = travelClass === "First Class" ? "Business"
+                 : travelClass === "Premium Economy" ? "premium_economy"
+                 : travelClass === "Business" ? "business"
+                 : "economy";
+  const mult = CLASS_MULTIPLIER[travelClass] || 1;
+
+  const key     = `${from}-${to}`;
+  const revKey  = `${to}-${from}`;
+  let   found   = FLIGHTS_ROUTE_MAP[key] || [];
+
+  // For reverse routes, swap origin/destination display
+  if (!found.length && FLIGHTS_ROUTE_MAP[revKey]) {
+    found = FLIGHTS_ROUTE_MAP[revKey].map(f => ({...f, origin:to, destination:from, _reversed:true}));
+  }
+
+  if (!found.length) return [];
+
+  return found.map(f => {
+    const baseFare = f.fares[classKey] || f.fares["economy"] || 3000;
+    const px = Math.round(baseFare * (0.92 + Math.random() * 0.16));
+    return {
+      id:           f.flight_id + "_" + generateId(),
+      airline:      f.airline,
+      airlineCode:  f.code,
+      flightNumber: f.flight_id,
+      aircraft:     f.aircraft,
+      from,  to,
+      depTime:      f.dep,
+      arrTime:      f.arr,
+      depHour:      parseInt(f.dep.split(":")[0])*60 + parseInt(f.dep.split(":")[1]),
+      durationMins: f.dur,
+      duration:     formatDuration(f.dur),
+      price:        px,
+      priceTotal:   px * passengers,
+      travelClass,
+      passengers,
+      stops:        0,
+      mealsAvailable: f.meals,
+    };
+  }).sort((a,b) => a.price - b.price);
+}
+
+
 let allFlights = [];
+
+let allReturnFlights = [];
+let _selectedOutbound = null;
+let _isRoundTrip = false;
 
 function initFlightsPage() {
   if (!document.getElementById("flight-list")) return;
   const p          = new URLSearchParams(window.location.search);
   const from       = p.get("from")||"DEL", to=p.get("to")||"BOM";
   const depart     = p.get("depart")||"";
+  const returnDate = p.get("returnDate")||"";
   const passengers = parseInt(p.get("passengers")||"1");
   const travelClass= p.get("class")||"Economy";
+  _isRoundTrip     = p.get("trip") === "roundtrip";
 
   const title = document.getElementById("results-title");
   const meta  = document.getElementById("results-meta");
-  if (title) title.textContent = `${from} → ${to}`;
-  if (meta)  meta.textContent  = `${depart?formatDate(depart):"Flexible"} · ${passengers} Passenger${passengers>1?"s":""} · ${travelClass}`;
+  if (title) title.textContent = _isRoundTrip ? `${from} ⇌ ${to}` : `${from} → ${to}`;
+  if (meta)  meta.textContent  = `${depart?formatDate(depart):"Flexible"}${_isRoundTrip&&returnDate?" → "+formatDate(returnDate):""} · ${passengers} Passenger${passengers>1?"s":""} · ${travelClass}`;
 
   setTimeout(() => {
     allFlights = generateFlights(from, to, travelClass, passengers);
+    if (_isRoundTrip) {
+      allReturnFlights = generateFlights(to, from, travelClass, passengers);
+      sessionStorage.setItem("jsg_return_flights", JSON.stringify(allReturnFlights));
+    }
     sessionStorage.setItem("jsg_flights", JSON.stringify(allFlights));
+    sessionStorage.setItem("jsg_trip_type", _isRoundTrip ? "roundtrip" : "oneway");
+
+    // Render outbound section
+    const list = document.getElementById("flight-list");
+    if (_isRoundTrip) {
+      list.insertAdjacentHTML("beforebegin", `
+        <div class="section-divider">
+          <span>✈ Outbound — ${from} → ${to} &nbsp;·&nbsp; ${formatDate(depart)}</span>
+        </div>`);
+    }
     renderFlights(allFlights);
+
+    // Render return section for round trip
+    if (_isRoundTrip) {
+      const returnSection = document.createElement("div");
+      returnSection.id = "return-flight-section";
+      returnSection.innerHTML = `
+        <div class="section-divider" style="margin-top:2rem">
+          <span>✈ Return — ${to} → ${from} &nbsp;·&nbsp; ${formatDate(returnDate)}</span>
+        </div>
+        <div id="return-flight-list"></div>`;
+      list.parentNode.insertBefore(returnSection, list.nextSibling);
+      renderReturnFlights(allReturnFlights);
+    }
+
     const cnt = document.getElementById("results-count");
-    if (cnt) cnt.textContent = `${allFlights.length} flights found`;
+    if (cnt) cnt.textContent = `${allFlights.length} flights found${_isRoundTrip ? " (select one outbound + one return)" : ""}`;
   }, 900);
 
+  let _activeSort   = null;   // "price" | "duration" | "departure" | null
+  let _activeFilter = "all";  // "all" | "Economy" | "Business" | "First Class"
+
+  function applyFilterAndSort() {
+    // Filter
+    let list = _activeFilter === "all"
+      ? [...allFlights]
+      : allFlights.filter(f => f.travelClass === _activeFilter);
+
+    // Sort
+    if (_activeSort === "price")     list.sort((a,b) => a.price - b.price);
+    if (_activeSort === "duration")  list.sort((a,b) => a.durationMins - b.durationMins);
+    if (_activeSort === "departure") list.sort((a,b) => a.depHour - b.depHour);
+
+    renderFlights(list);
+
+    // Same for return flights if round trip
+    if (_isRoundTrip) {
+      let retList = _activeFilter === "all"
+        ? [...allReturnFlights]
+        : allReturnFlights.filter(f => f.travelClass === _activeFilter);
+      if (_activeSort === "price")     retList.sort((a,b) => a.price - b.price);
+      if (_activeSort === "duration")  retList.sort((a,b) => a.durationMins - b.durationMins);
+      if (_activeSort === "departure") retList.sort((a,b) => a.depHour - b.depHour);
+      renderReturnFlights(retList);
+    }
+  }
+
+  // Class filter chips (All / Economy / Business / First Class)
   document.querySelectorAll(".filter-chip[data-filter]").forEach(chip => {
     chip.addEventListener("click", () => {
-      document.querySelectorAll(".filter-chip[data-filter]").forEach(c=>c.classList.remove("active"));
+      document.querySelectorAll(".filter-chip[data-filter]").forEach(c => c.classList.remove("active"));
       chip.classList.add("active");
-      const filtered = chip.dataset.filter==="all" ? allFlights : allFlights.filter(f=>f.travelClass===chip.dataset.filter);
-      renderFlights(filtered);
-      const cnt = document.getElementById("results-count");
-      if (cnt) cnt.textContent = `${filtered.length} flights found`;
+      _activeFilter = chip.dataset.filter;
+      applyFilterAndSort();
     });
   });
 
+  // Sort chips
   document.querySelectorAll(".filter-chip[data-sort]").forEach(chip => {
     chip.addEventListener("click", () => {
-      const s = chip.dataset.sort, list=[...allFlights];
-      if (s==="price")     list.sort((a,b)=>a.price-b.price);
-      if (s==="duration")  list.sort((a,b)=>a.durationMins-b.durationMins);
-      if (s==="departure") list.sort((a,b)=>a.depHour-b.depHour);
-      renderFlights(list);
+      const isSameSort = _activeSort === chip.dataset.sort;
+      document.querySelectorAll(".filter-chip[data-sort]").forEach(c => c.classList.remove("active"));
+      if (isSameSort) {
+        _activeSort = null; // toggle off
+      } else {
+        chip.classList.add("active");
+        _activeSort = chip.dataset.sort;
+      }
+      applyFilterAndSort();
     });
   });
 }
 
-function renderFlights(flights) {
-  const list = document.getElementById("flight-list");
+function renderReturnFlights(flights) {
+  const list = document.getElementById("return-flight-list");
   if (!list) return;
-  if (!flights.length) { list.innerHTML=`<div class="no-results"><div class="icon">✈</div><p>No flights found.</p></div>`; return; }
-  list.innerHTML = flights.map((f,idx)=>`
-    <div class="flight-card" style="animation-delay:${idx*.06}s">
+  list.innerHTML = flights.map((f,idx)=>buildFlightCard(f, idx, true)).join("");
+}
+
+function buildFlightCard(f, idx, isReturn=false) {
+  const btnLabel = _isRoundTrip ? (isReturn ? "Select Return ✈" : "Select Outbound ✈") : "Book Now";
+  const btnFn    = _isRoundTrip
+    ? (isReturn ? `selectReturnFlight('${f.id}')` : `selectOutboundFlight('${f.id}')`)
+    : `bookFlight('${f.id}')`;
+  return `
+    <div class="flight-card" id="fcard-${f.id}" style="animation-delay:${idx*.06}s">
       <div class="airline-info">
         <div class="airline-logo">${f.airlineCode}</div>
         <div><div class="airline-name">${f.airline}</div><div class="flight-number">${f.flightNumber}</div></div>
@@ -547,7 +1003,7 @@ function renderFlights(flights) {
       <div class="flight-route">
         <div class="flight-duration">${f.duration}</div>
         <div class="route-line"><div class="route-dot"></div><div class="route-bar"></div><div class="route-dot"></div></div>
-        <div class="flight-stops ${f.stops>0?"has-stop":""}">${f.stops===0?"Non-stop":`${f.stops} Stop`}</div>
+        <div class="flight-stops">${f.stops===0?"Non-stop":"1 Stop"}</div>
       </div>
       <div class="time-block"><div class="time-big">${f.arrTime}</div><div class="airport-code">${f.to}</div></div>
       <div class="price-block">
@@ -557,14 +1013,65 @@ function renderFlights(flights) {
         <div style="font-size:.75rem;color:var(--text-muted);margin-top:4px">Total: ${formatPrice(f.priceTotal)}</div>
       </div>
       <div class="book-btn-wrap">
-        <button class="btn btn-primary" onclick="bookFlight('${f.id}')">Book Now</button>
+        <button class="btn btn-primary" onclick="${btnFn}">${btnLabel}</button>
       </div>
-    </div>`).join("");
+    </div>`;
 }
+
+let _rtOutboundId = null, _rtReturnId = null;
+
+function selectOutboundFlight(id) {
+  if (!requireLogin()) return;
+  _rtOutboundId = id;
+  document.querySelectorAll("#flight-list .flight-card").forEach(c => {
+    c.classList.toggle("selected", c.id === `fcard-${id}`);
+  });
+  showToast("\u2705 Outbound selected! Now pick your return flight below.", "success");
+  document.getElementById("return-flight-section")?.scrollIntoView({behavior:"smooth"});
+}
+
+function selectReturnFlight(id) {
+  if (!requireLogin()) return;
+  if (!_rtOutboundId) { showToast("Please select an outbound flight first.", "warning"); return; }
+  _rtReturnId = id;
+  document.querySelectorAll("#return-flight-list .flight-card").forEach(c => {
+    c.classList.toggle("selected", c.id === `fcard-${id}`);
+  });
+  const outbound = allFlights.find(f => f.id === _rtOutboundId);
+  const ret      = allReturnFlights.find(f => f.id === _rtReturnId);
+  if (outbound && ret) {
+    sessionStorage.setItem("jsg_selected_flight", _rtOutboundId);
+    sessionStorage.setItem("jsg_selected_return", _rtReturnId);
+    showToast("\u2705 Both flights selected! Proceeding to booking...", "success");
+    setTimeout(() => { window.location.href = "booking.html"; }, 900);
+  }
+}
+
+function renderFlights(flights) {
+  const list = document.getElementById("flight-list");
+  if (!list) return;
+  if (!flights.length) {
+    const filter = document.querySelector(".filter-chip[data-filter].active")?.dataset.filter || "all";
+    const msg = filter !== "all"
+      ? `No ${filter} flights on this route. Try a different class.`
+      : "No flights found for this route.";
+    list.innerHTML = `<div class="no-results"><div class="icon">✈</div><p>${msg}</p></div>`;
+    return;
+  }
+  list.innerHTML = flights.map((f,idx)=>buildFlightCard(f,idx,false)).join("");
+}
+
+function renderReturnFlights(flights) {
+  const list = document.getElementById("return-flight-list");
+  if (!list) return;
+  list.innerHTML = flights.map((f,idx)=>buildFlightCard(f,idx,true)).join("");
+}
+
 
 function bookFlight(flightId) {
   if (!requireLogin()) return;
   sessionStorage.setItem("jsg_selected_flight", flightId);
+  sessionStorage.removeItem("jsg_selected_return");
   window.location.href = "booking.html";
 }
 
@@ -576,13 +1083,29 @@ function initBookingPage() {
   if (!document.getElementById("passenger-forms-container")) return;
   if (!requireLogin()) return;
 
-  const flightId = sessionStorage.getItem("jsg_selected_flight");
-  const flights  = JSON.parse(sessionStorage.getItem("jsg_flights")||"[]");
-  const flight   = flights.find(f=>f.id===flightId);
-  if (!flight) { showToast("Flight lost. Search again.","error"); setTimeout(()=>{window.location.href="index.html";},1000); return; }
+  const flightId   = sessionStorage.getItem("jsg_selected_flight");
+  const returnId   = sessionStorage.getItem("jsg_selected_return");
+  const tripType   = sessionStorage.getItem("jsg_trip_type") || "oneway";
+  const flights    = JSON.parse(sessionStorage.getItem("jsg_flights")||"[]");
+  const retFlights = JSON.parse(sessionStorage.getItem("jsg_return_flights")||"[]");
+  const flight     = flights.find(f=>f.id===flightId);
+  const retFlight  = returnId ? retFlights.find(f=>f.id===returnId) : null;
+
+  // If payment just completed, don't re-init (success modal is showing)
+  if (sessionStorage.getItem("jsg_payment_done") === "1") return;
+
+  if (!flight) {
+    showToast("Flight lost. Please search again.","error");
+    setTimeout(()=>{ window.location.href="index.html"; },1500);
+    return;
+  }
+
+  // Attach return flight to flight object so it flows through booking
+  flight.returnFlight = retFlight || null;
+  flight.isRoundTrip  = tripType === "roundtrip" && !!retFlight;
 
   renderBookingSummary(flight);
-  renderPassengerForms(flight.passengers);
+  renderPassengerForms(flight.passengers, flight);
   renderFareSummary(flight);
 
   if (flight.passengers > 1) {
@@ -593,10 +1116,18 @@ function initBookingPage() {
     });
   }
 
+  // Clone proceed-btn to wipe any stale listeners from previous renders
+  const proceedOld = document.getElementById("proceed-btn");
+  if (proceedOld) {
+    const proceedNew = proceedOld.cloneNode(true);
+    proceedOld.parentNode.replaceChild(proceedNew, proceedOld);
+  }
   document.getElementById("proceed-btn")?.addEventListener("click", () => {
     if (!validatePassengerForms(flight.passengers)) return;
     const splitChecked = document.getElementById("split-fare-checkbox")?.checked;
     if (splitChecked && !validateSplitEmails(flight.passengers)) return;
+    // Collect passenger data NOW while forms are still in DOM
+    flight._collectedPassengers = collectPassengerData(flight.passengers);
     openBookingOtpModal(flight, splitChecked);
   });
 }
@@ -604,17 +1135,54 @@ function initBookingPage() {
 function renderBookingSummary(f) {
   const r = document.getElementById("booking-route");
   const d = document.getElementById("booking-details");
-  if (r) r.innerHTML = `<span>${f.from}</span><span>✈</span><span>${f.to}</span>`;
-  if (d) d.innerHTML = `
+  if (r) r.innerHTML = f.isRoundTrip
+    ? `<span>${f.from}</span><span>⇌</span><span>${f.to}</span>`
+    : `<span>${f.from}</span><span>✈</span><span>${f.to}</span>`;
+
+  let html = `
+    <div class="detail-section-label" style="font-size:.75rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem">
+      ${f.isRoundTrip ? "✈ Outbound" : "✈ Flight"}
+    </div>
     <div class="detail-item"><span class="label">Airline</span><span class="value">${f.airline} · ${f.flightNumber}</span></div>
     <div class="detail-item"><span class="label">Departure</span><span class="value">${f.depTime}</span></div>
     <div class="detail-item"><span class="label">Arrival</span><span class="value">${f.arrTime}</span></div>
     <div class="detail-item"><span class="label">Duration</span><span class="value">${f.duration}</span></div>
     <div class="detail-item"><span class="label">Class</span><span class="value">${f.travelClass}</span></div>
     <div class="detail-item"><span class="label">Passengers</span><span class="value">${f.passengers}</span></div>`;
+
+  if (f.isRoundTrip && f.returnFlight) {
+    const rf = f.returnFlight;
+    html += `
+    <div style="margin-top:1rem;padding-top:.75rem;border-top:1px solid var(--border)">
+    <div class="detail-section-label" style="font-size:.75rem;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem">
+      ✈ Return
+    </div>
+    <div class="detail-item"><span class="label">Airline</span><span class="value">${rf.airline} · ${rf.flightNumber}</span></div>
+    <div class="detail-item"><span class="label">Departure</span><span class="value">${rf.depTime}</span></div>
+    <div class="detail-item"><span class="label">Arrival</span><span class="value">${rf.arrTime}</span></div>
+    <div class="detail-item"><span class="label">Duration</span><span class="value">${rf.duration}</span></div>
+    </div>`;
+  }
+  if (d) d.innerHTML = html;
 }
 
-function renderPassengerForms(count) {
+function renderPassengerForms(count, flight) {
+  const airlineName  = flight?.airline || "IndiGo";
+  const travelClass  = flight?.travelClass || "Economy";
+  const mealsOk      = flight?.mealsAvailable !== false;
+  const availMeals   = getMealsForFlight(airlineName, travelClass, mealsOk);
+  const mealOptions  = availMeals.map(m =>
+    `<option value="${m.id}">${m.cat} — ${m.name}${m.price>0?" (+₹"+m.price+")":m.price===0&&m.id!="MEAL-NONE"?" (Complimentary)":""}</option>`
+  ).join("");
+
+  const policy = MEAL_POLICY[airlineName];
+  const classKey = travelClass.toLowerCase().replace(" ","_");
+  const policyNote = policy?.[classKey]?.complimentary
+    ? `<p style="font-size:.78rem;color:#22c55e;margin-bottom:.5rem">✅ 1 meal complimentary for ${airlineName} ${travelClass}</p>`
+    : policy?.[classKey]?.discount
+    ? `<p style="font-size:.78rem;color:var(--accent);margin-bottom:.5rem">🏷 Pre-order discount: ${policy[classKey].discount}% off</p>`
+    : "";
+
   document.getElementById("passenger-forms-container").innerHTML =
     Array.from({length:count},(_,idx)=>{const i=idx+1; return `
       <div class="passenger-form-card">
@@ -637,6 +1205,11 @@ function renderPassengerForms(count) {
           <div class="form-group"><label class="form-label">Email *</label>
             <input type="email" class="form-control" id="p${i}-email" placeholder="passenger@email.com" />
             <span class="form-error hidden" id="p${i}-email-err">⚠ Valid email required.</span></div>
+          ${mealsOk ? `<div class="form-group">
+            <label class="form-label">🍽 Meal Preference</label>
+            ${policyNote}
+            <select class="form-control" id="p${i}-meal">${mealOptions}</select>
+          </div>` : `<p style="font-size:.8rem;color:var(--text-muted);margin-top:.25rem">⚠ No meals available on this flight</p>`}
         </div>
       </div>`; }).join("");
 }
@@ -662,17 +1235,22 @@ function validatePassengerForms(count) {
 function renderSplitEmailInputs(count) {
   const c = document.getElementById("split-phone-inputs");
   if (!c) return;
-  c.innerHTML = Array.from({length:count},(_,idx)=>{const i=idx+1; return `
+  // Primary passenger (i=1) already filled in passenger forms — skip
+  // Only collect emails for passengers 2..N
+  c.innerHTML = `<p style="font-size:.82rem;color:var(--text-muted);margin-bottom:.75rem">
+    ✅ Your details are filled above. Enter email addresses for the other passengers to send their payment links.
+  </p>` +
+  Array.from({length:count-1},(_,idx)=>{const i=idx+2; return `
     <div class="split-phone-input">
-      <span style="font-size:.85rem;font-weight:600;min-width:90px;color:var(--text-muted)">Passenger ${i}</span>
-      <input type="email" class="form-control" id="split-email-${i}" placeholder="passenger@email.com" />
+      <span style="font-size:.85rem;font-weight:600;min-width:110px;color:var(--text-muted)">Passenger ${i}</span>
+      <input type="email" class="form-control" id="split-email-${i}" placeholder="passenger${i}@email.com" />
       <span class="form-error hidden" id="split-email-${i}-err">⚠ Valid email required</span>
     </div>`;}).join("");
 }
 
 function validateSplitEmails(count) {
   let valid = true;
-  for (let i=1;i<=count;i++) {
+  for (let i=2;i<=count;i++) {  // start from 2 — passenger 1 uses their own email from form
     const e = document.getElementById(`split-email-${i}`)?.value.trim();
     if (!e||!isValidEmail(e)) {showError(`split-email-${i}-err`,true); valid=false;} else showError(`split-email-${i}-err`,false);
   }
@@ -680,25 +1258,60 @@ function validateSplitEmails(count) {
   return valid;
 }
 
+function getMealTotal(paxCount) {
+  let total = 0;
+  for (let i=1;i<=paxCount;i++) {
+    const mealId = document.getElementById(`p${i}-meal`)?.value || "MEAL-NONE";
+    const meal   = MEALS_DB.find(m=>m.id===mealId);
+    if (meal) total += meal.price;
+  }
+  return total;
+}
+
 function renderFareSummary(flight) {
   const el = document.getElementById("fare-rows");
   if (!el) return;
-  const tax=Math.round(flight.price*.18), total=(flight.price+tax)*flight.passengers+200;
-  el.innerHTML=`
-    <div class="fare-row"><span class="fare-label">Base Fare (×${flight.passengers})</span><span>${formatPrice(flight.price*flight.passengers)}</span></div>
-    <div class="fare-row"><span class="fare-label">Taxes & Fees (18%)</span><span>${formatPrice(tax*flight.passengers)}</span></div>
+  const rf        = flight.returnFlight;
+  const baseOut   = flight.price * flight.passengers;
+  const baseRet   = rf ? rf.price * rf.passengers : 0;
+  const baseTotal = baseOut + baseRet;
+  const mealCost  = getMealTotal(flight.passengers);
+  const tax       = Math.round((baseTotal + mealCost) * .18);
+  const total     = baseTotal + mealCost + tax + 200;
+
+  let html = `
+    <div class="fare-row"><span class="fare-label">Outbound Fare (×${flight.passengers})</span><span>${formatPrice(baseOut)}</span></div>`;
+  if (rf) html += `
+    <div class="fare-row"><span class="fare-label">Return Fare (×${rf.passengers})</span><span>${formatPrice(baseRet)}</span></div>`;
+  if (mealCost > 0) html += `
+    <div class="fare-row"><span class="fare-label">Meal Charges</span><span>${formatPrice(mealCost)}</span></div>`;
+  html += `
+    <div class="fare-row"><span class="fare-label">Taxes & Fees (18%)</span><span>${formatPrice(tax)}</span></div>
     <div class="fare-row"><span class="fare-label">Convenience Fee</span><span>${formatPrice(200)}</span></div>
-    <div class="fare-row"><span>Total</span><span style="color:var(--accent)">${formatPrice(total)}</span></div>`;
+    <div class="fare-row total-row"><span>Total</span><span style="color:var(--accent)">${formatPrice(total)}</span></div>`;
+  el.innerHTML = html;
+
+  // Re-render on meal change
+  for (let i=1;i<=flight.passengers;i++) {
+    document.getElementById(`p${i}-meal`)?.addEventListener("change", ()=>renderFareSummary(flight));
+  }
 }
 
 function collectPassengerData(count) {
-  return Array.from({length:count},(_,idx)=>{const i=idx+1; return {
-    name:  document.getElementById(`p${i}-name`)?.value.trim()||"",
-    age:   document.getElementById(`p${i}-age`)?.value||"",
-    gender:document.getElementById(`p${i}-gender`)?.value||"",
-    phone: document.getElementById(`p${i}-phone`)?.value.trim()||"",
-    email: document.getElementById(`p${i}-email`)?.value.trim()||"",
-  };});
+  return Array.from({length:count},(_,idx)=>{const i=idx+1;
+    const mealId = document.getElementById(`p${i}-meal`)?.value || "MEAL-NONE";
+    const meal   = MEALS_DB.find(m=>m.id===mealId) || MEALS_DB.find(m=>m.id==="MEAL-NONE");
+    return {
+      name:  document.getElementById(`p${i}-name`)?.value.trim()||"",
+      age:   document.getElementById(`p${i}-age`)?.value||"",
+      gender:document.getElementById(`p${i}-gender`)?.value||"",
+      phone: document.getElementById(`p${i}-phone`)?.value.trim()||"",
+      email: document.getElementById(`p${i}-email`)?.value.trim()||"",
+      meal:  meal ? `${meal.cat} — ${meal.name}` : "No Meal",
+      mealId: mealId,
+      mealPrice: meal ? meal.price : 0,
+    };
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -785,8 +1398,17 @@ function openPaymentModal(flight, isSplit) {
   const modal = document.getElementById("payment-modal");
   const body  = document.getElementById("payment-modal-body");
   if (!modal||!body) return;
-  const tax=Math.round(flight.price*.18), total=(flight.price+tax)*flight.passengers+200;
-  const user=getLoggedInUser();
+
+  // Correct total — include return flight if round trip
+  const rf         = flight.returnFlight;
+  const baseTotal  = (flight.price + (rf ? rf.price : 0)) * flight.passengers;
+  const _pax       = flight._collectedPassengers || [];
+  const mealCost   = _pax.reduce((sum,p)=>sum+(p.mealPrice||0),0);
+  const tax        = Math.round((baseTotal + mealCost) * .18);
+  const total      = baseTotal + mealCost + tax + 200;
+  const user       = getLoggedInUser();
+
+  // Build HTML — NO confirm-pay-btn here, we add it separately via JS
   body.innerHTML = `
     <div class="card-visual">
       <div class="card-brand">JetSetGo Pay — Secure</div>
@@ -810,59 +1432,78 @@ function openPaymentModal(flight, isSplit) {
       <p style="font-family:'Syne';font-size:1.8rem;font-weight:800;color:var(--accent)">${formatPrice(total)}</p>
     </div>
     <div class="modal-footer" style="padding-top:1rem">
-      <button class="btn btn-ghost" onclick="document.getElementById('payment-modal').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-ghost" id="cancel-pay-btn">Cancel</button>
       <button class="btn btn-primary btn-lg" id="confirm-pay-btn">🔒 Pay ${formatPrice(total)}</button>
     </div>`;
+
   modal.classList.remove("hidden");
 
-  // Wire up close button
-  const closeBtn = document.getElementById("close-payment");
-  if (closeBtn) {
-    const newClose = closeBtn.cloneNode(true);
-    closeBtn.parentNode.replaceChild(newClose, closeBtn);
-    newClose.addEventListener("click", () => modal.classList.add("hidden"));
-  }
+  // Wire cancel — fresh element so no cloning needed
+  document.getElementById("cancel-pay-btn").addEventListener("click", () => {
+    modal.classList.add("hidden");
+  });
 
-  // Clone confirm button to avoid duplicate listeners
-  const oldConfirm = document.getElementById("confirm-pay-btn");
-  if (oldConfirm) {
-    const newConfirm = oldConfirm.cloneNode(true);
-    oldConfirm.parentNode.replaceChild(newConfirm, oldConfirm);
-  }
+  // Wire pay button — fresh element, just add listener directly
+  document.getElementById("confirm-pay-btn").addEventListener("click", async () => {
+    const card = document.getElementById("pay-card")?.value.replace(/\s/g,"");
+    const exp  = document.getElementById("pay-expiry")?.value;
+    const cvv  = document.getElementById("pay-cvv")?.value;
+    const name = document.getElementById("pay-name")?.value.trim();
+    if (!card||card.length<16) { showToast("Enter a valid card number.","warning"); return; }
+    if (!exp||!exp.includes("/")) { showToast("Enter a valid expiry date.","warning"); return; }
+    if (!cvv||cvv.length<3)    { showToast("Enter the CVV.","warning"); return; }
+    if (!name)                 { showToast("Enter the card holder name.","warning"); return; }
 
-  document.getElementById("confirm-pay-btn")?.addEventListener("click", async ()=>{
-    const card=document.getElementById("pay-card")?.value.replace(/\s/g,"");
-    const exp =document.getElementById("pay-expiry")?.value;
-    const cvv =document.getElementById("pay-cvv")?.value;
-    const name=document.getElementById("pay-name")?.value.trim();
-    if (!card||card.length<16) { showToast("Enter valid card number.","warning"); return; }
-    if (!exp||!exp.includes("/")) { showToast("Enter valid expiry.","warning"); return; }
-    if (!cvv||cvv.length<3)    { showToast("Enter CVV.","warning"); return; }
-    if (!name)                 { showToast("Enter card holder name.","warning"); return; }
-    const btn=document.getElementById("confirm-pay-btn");
-    btn.disabled=true; btn.textContent="Processing…";
-    await new Promise(r=>setTimeout(r,1800));
-    document.getElementById("payment-modal").classList.add("hidden");
+    const btn = document.getElementById("confirm-pay-btn");
+    btn.disabled = true;
+    btn.textContent = "Processing…";
+
+    await new Promise(r => setTimeout(r, 1800));
+    modal.classList.add("hidden");
     await completeBooking(flight);
   });
 }
 
 async function completeBooking(flight) {
   const user       = getLoggedInUser();
-  const passengers = collectPassengerData(flight.passengers);
-  const tax        = Math.round(flight.price*.18);
-  const total      = (flight.price+tax)*flight.passengers+200;
+  const passengers = flight._collectedPassengers || collectPassengerData(flight.passengers);
+  const rf         = flight.returnFlight;
+  const baseTotal  = (flight.price + (rf ? rf.price : 0)) * flight.passengers;
+  const mealCost   = passengers.reduce((sum,p)=>sum+(p.mealPrice||0),0);
+  const tax        = Math.round((baseTotal + mealCost) * .18);
+  const total      = baseTotal + mealCost + tax + 200;
   const bookingId  = "JSG"+Date.now().toString().slice(-8).toUpperCase();
   const booking    = {
     id:bookingId, userId:user?.uid||user?.id||"guest",
     userName:user?.name||"Guest", userEmail:user?.email||"",
-    flight, passengers, status:"Fully Paid", splitFare:false,
+    flight, returnFlight: rf || null,
+    isRoundTrip: flight.isRoundTrip || false,
+    passengers, status:"Fully Paid", splitFare:false,
     totalAmount:total, createdAt:new Date().toISOString(),
   };
   await saveBooking(booking);
-  const sm=document.getElementById("success-modal"), si=document.getElementById("success-booking-id");
+
+  // Set a flag so page reload guard knows payment is done
+  sessionStorage.setItem("jsg_payment_done", "1");
+
+  // Hide all modals
+  document.getElementById("payment-modal")?.classList.add("hidden");
+  document.getElementById("booking-otp-modal")?.classList.add("hidden");
+
+  // Show success modal
+  const sm = document.getElementById("success-modal");
+  const si = document.getElementById("success-booking-id");
   if (sm) sm.classList.remove("hidden");
-  if (si) si.textContent=`Booking ID: ${bookingId}`;
+  if (si) si.textContent = `Booking ID: ${bookingId}`;
+
+  // Redirect to My Bookings after 3s
+  setTimeout(() => {
+    sessionStorage.removeItem("jsg_selected_flight");
+    sessionStorage.removeItem("jsg_selected_return");
+    sessionStorage.removeItem("jsg_trip_type");
+    sessionStorage.removeItem("jsg_payment_done");
+    window.location.href = "mybookings.html";
+  }, 3000);
 }
 
 async function showSplitFareFlow(flight) {
@@ -873,9 +1514,10 @@ async function showSplitFareFlow(flight) {
   const perPax     = Math.ceil(total/flight.passengers);
   const bookingId  = "JSG"+Date.now().toString().slice(-8).toUpperCase();
 
+  // Passenger 1 = primary booker — use their email from passenger form
+  const p1Email = document.getElementById("p1-email")?.value.trim() || passengers[0]?.email || "";
   const splitEmails = Array.from({length:flight.passengers},(_,i)=>
-    document.getElementById(`split-email-${i+1}`)?.value.trim()||""
-  );
+    i===0 ? p1Email : (document.getElementById(`split-email-${i+1}`)?.value.trim()||"")  );
 
   const booking = {
     id:bookingId, userId:user?.uid||user?.id||"guest",
@@ -913,8 +1555,29 @@ async function showSplitFareFlow(flight) {
 async function saveBooking(booking) {
   if (isFirebaseConfigured()) {
     await loadFirebase();
-    try { await db.collection("bookings").doc(booking.id).set(booking); return; } catch(e) { console.error(e); }
+    try {
+      await db.collection("bookings").doc(booking.id).set(booking);
+      console.log("✅ Booking saved to Firebase:", booking.id);
+      // Also save to localStorage as backup
+      const all=JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
+      const idx=all.findIndex(b=>b.id===booking.id);
+      if (idx>=0) all[idx]=booking; else all.push(booking);
+      localStorage.setItem("jsg_bookings",JSON.stringify(all));
+      return;
+    } catch(e) {
+      console.error("❌ Firebase save failed:", e.code, e.message);
+      if (e.code === "permission-denied") {
+        showToast("⚠ Firebase rules blocking save. Go to Firestore → Rules → set allow read,write: if true → Publish", "error", 8000);
+      } else if (e.code === "not-found" || e.code === "unavailable") {
+        showToast("⚠ Firestore not set up yet. Create database in Firebase Console first.", "error", 8000);
+      } else {
+        showToast(`⚠ Cloud save failed: ${e.message}. Saved locally.`, "warning", 6000);
+      }
+    }
+  } else {
+    console.warn("⚠ Firebase not configured — saving to localStorage only");
   }
+  // Fallback: localStorage
   const all=JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
   const idx=all.findIndex(b=>b.id===booking.id);
   if (idx>=0) all[idx]=booking; else all.push(booking);
@@ -933,17 +1596,96 @@ async function updateBooking(booking) {
   await saveBooking(booking);
 }
 
+
+function getCancellationCharge(booking) {
+  // Calculate charge based on how far the flight is
+  const depDate = booking.flight?.depTime;
+  const created = new Date(booking.createdAt);
+  const now     = new Date();
+  const hoursSinceBooking = (now - created) / (1000*60*60);
+
+  // Simple rule based on hours since booking
+  if (hoursSinceBooking < 24)  return { pct: 10, label: "Within 24h of booking — 10% charge" };
+  if (hoursSinceBooking < 72)  return { pct: 25, label: "1–3 days after booking — 25% charge" };
+  return                              { pct: 50, label: "More than 3 days — 50% charge" };
+}
+
+async function cancelBooking(bookingId) {
+  const booking = _allBookings.find(b => b.id === bookingId);
+  if (!booking) return;
+
+  const charge  = getCancellationCharge(booking);
+  const fee     = Math.round(booking.totalAmount * charge.pct / 100);
+  const refund  = booking.totalAmount - fee;
+
+  const confirmed = confirm(
+    `Cancel booking ${bookingId}?\n\n` +
+    `${charge.label}\n` +
+    `Cancellation fee: ₹${fee.toLocaleString("en-IN")}\n` +
+    `Refund amount:    ₹${refund.toLocaleString("en-IN")}\n\n` +
+    `This cannot be undone.`
+  );
+  if (!confirmed) return;
+
+  const now = new Date().toISOString();
+
+  // Update in memory
+  const idx = _allBookings.findIndex(b => b.id === bookingId);
+  if (idx >= 0) {
+    _allBookings[idx].status        = "Cancelled";
+    _allBookings[idx].cancelledAt   = now;
+    _allBookings[idx].cancellationFee = fee;
+    _allBookings[idx].refundAmount  = refund;
+  }
+
+  // Update localStorage
+  const all = JSON.parse(localStorage.getItem("jsg_bookings") || "[]");
+  const li  = all.findIndex(b => b.id === bookingId);
+  if (li >= 0) {
+    all[li].status = "Cancelled"; all[li].cancelledAt = now;
+    all[li].cancellationFee = fee; all[li].refundAmount = refund;
+  }
+  localStorage.setItem("jsg_bookings", JSON.stringify(all));
+
+  // Update Firebase
+  if (isFirebaseConfigured()) {
+    await loadFirebase();
+    try {
+      await db.collection("bookings").doc(bookingId).update({
+        status: "Cancelled", cancelledAt: now,
+        cancellationFee: fee, refundAmount: refund
+      });
+      console.log("✅ Cancellation saved to Firebase");
+    } catch(e) { console.error("Firebase cancel failed:", e.message); }
+  }
+
+  showToast(`Booking cancelled. Refund of ₹${refund.toLocaleString("en-IN")} will be processed in 5–7 days.`, "success", 6000);
+  renderBookings();
+}
+
 async function loadUserBookings() {
   const user=getLoggedInUser(); if (!user) return [];
   if (isFirebaseConfigured()) {
     await loadFirebase();
     try {
-      const snap=await db.collection("bookings").where("userId","==",user.uid||user.id||"guest").orderBy("createdAt","desc").get();
-      return snap.docs.map(d=>d.data());
-    } catch(e) { console.error(e); }
+      const snap=await db.collection("bookings")
+        .where("userId","==",user.uid||user.id||"guest")
+        .orderBy("createdAt","desc")
+        .get();
+      const fbBookings = snap.docs.map(d=>d.data());
+      console.log("✅ Loaded", fbBookings.length, "bookings from Firebase");
+      return fbBookings;
+    } catch(e) {
+      console.error("❌ Firebase load failed:", e.code, e.message);
+      // Fall through to localStorage
+    }
   }
-  return JSON.parse(localStorage.getItem("jsg_bookings")||"[]")
-    .filter(b=>b.userId===(user.uid||user.id)).reverse();
+  // Fallback: localStorage
+  const uid = user.uid||user.id||"guest";
+  const all = JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
+  const local = all.filter(b=>b.userId===uid).reverse();
+  console.log("📦 Loaded", local.length, "bookings from localStorage");
+  return local;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -959,6 +1701,11 @@ async function initMyBookingsPage() {
     <div class="loader-wrap"><div class="spinner"></div><p class="loader-text">Loading bookings…</p></div>`;
   _allBookings = await loadUserBookings();
   renderBookings();
+  // Clone chips to clear old listeners
+  document.querySelectorAll(".filter-chip[data-status]").forEach(chip=>{
+    const fresh = chip.cloneNode(true);
+    chip.parentNode.replaceChild(fresh, chip);
+  });
   document.querySelectorAll(".filter-chip[data-status]").forEach(chip=>{
     chip.addEventListener("click",()=>{
       document.querySelectorAll(".filter-chip[data-status]").forEach(c=>c.classList.remove("active"));
@@ -968,61 +1715,116 @@ async function initMyBookingsPage() {
 }
 
 function renderBookings() {
-  const list=document.getElementById("bookings-list"); if (!list) return;
-  let bookings=_allBookings;
-  if (_bookingFilter!=="all") bookings=bookings.filter(b=>b.status===_bookingFilter);
+  const list = document.getElementById("bookings-list");
+  if (!list) return;
+  let bookings = _allBookings;
+  if (_bookingFilter !== "all") bookings = bookings.filter(b => b.status === _bookingFilter);
+
   if (!bookings.length) {
-    list.innerHTML=`<div class="empty-state"><div class="empty-icon">✈</div>
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">✈</div>
       <h3>No bookings found</h3>
-      <p>${_bookingFilter!=="all"?"No bookings with this status.":"You haven't booked any flights yet."}</p>
-      <a href="index.html" class="btn btn-primary" style="margin-top:1.25rem">Search Flights</a></div>`;
+      <p>${_bookingFilter !== "all" ? "No bookings with this status." : "You haven\'t booked any flights yet."}</p>
+      <a href="index.html" class="btn btn-primary" style="margin-top:1.25rem">Search Flights</a>
+    </div>`;
     return;
   }
-  const badges={"Fully Paid":`<span class="badge badge-success">✅ Fully Paid</span>`,
-    "Partially Paid":`<span class="badge badge-warning">⏳ Partially Paid</span>`,
-    "Pending":`<span class="badge badge-danger">🔴 Pending</span>`};
 
-  list.innerHTML=bookings.map(b=>{
-    const paxHtml=b.passengers.map(p=>{
+  const statusBadge = (b) => {
+    if (b.status === "Cancelled")      return `<span class="badge badge-danger">❌ Cancelled</span>`;
+    if (b.status === "Fully Paid")     return `<span class="badge badge-success">✅ Fully Paid</span>`;
+    if (b.status === "Partially Paid") return `<span class="badge badge-warning">⏳ Partially Paid</span>`;
+    if (b.status === "Pending")        return `<span class="badge badge-danger">🔴 Pending</span>`;
+    return `<span class="badge badge-muted">${b.status}</span>`;
+  };
+
+  list.innerHTML = bookings.map(b => {
+    // Passenger rows
+    const paxRows = b.passengers.map(p => {
       if (b.splitFare) {
-        const paid=p.paymentStatus==="Paid";
+        const paid = p.paymentStatus === "Paid";
         return `<div class="passenger-status-row">
-          <div class="p-name">👤 ${p.name}</div>
-          <div style="font-size:.8rem;color:var(--text-muted)">${p.splitEmail||p.email}</div>
-          ${paid ? `<span class="badge badge-success">✅ Paid</span>`
+          <div>
+            <div class="p-name">👤 ${p.name}</div>
+            <div style="font-size:.8rem;color:var(--text-muted)">${p.splitEmail||p.email}</div>
+          </div>
+          ${paid
+            ? `<span class="badge badge-success">✅ Paid</span>`
             : `<div style="display:flex;gap:.5rem;align-items:center">
                 <span class="badge badge-danger">💳 Pending</span>
                 <button class="btn btn-primary btn-sm"
                   onclick="resendPaymentLink('${b.id}','${p.payToken}','${p.name}','${p.splitEmail||p.email}',${b.perPaxAmount})">
-                  Resend Link
-                </button></div>`}
+                  Resend
+                </button>
+              </div>`}
         </div>`;
       }
       return `<div class="passenger-status-row">
-        <div class="p-name">👤 ${p.name}</div>
-        <div style="font-size:.8rem;color:var(--text-muted)">${p.gender}·Age ${p.age}</div>
-        <span class="badge badge-success">✅ Paid</span></div>`;
+        <div>
+          <div class="p-name">👤 ${p.name}</div>
+          <div style="font-size:.8rem;color:var(--text-muted)">${p.gender||""} · Age ${p.age||""}${p.meal ? " · "+p.meal : ""}</div>
+        </div>
+        <span class="badge badge-success">✅ Paid</span>
+      </div>`;
     }).join("");
 
-    return `<div class="booking-item" id="booking-${b.id}">
+    // Return flight info
+    const returnInfo = b.isRoundTrip && b.returnFlight ? `
+      <div style="margin:.5rem 0;padding:.6rem .75rem;background:var(--surface2);border-radius:8px;font-size:.83rem">
+        <span style="color:var(--accent);font-weight:700">↩ Return:</span>
+        ${b.returnFlight.airline} · ${b.returnFlight.flightNumber} · ${b.returnFlight.depTime}–${b.returnFlight.arrTime}
+      </div>` : "";
+
+    // Cancellation info
+    const isCancelled = b.status === "Cancelled";
+    const cancelInfo = isCancelled ? `
+      <div style="margin-top:.75rem;padding:.75rem;background:rgba(239,68,68,.08);border-radius:8px;font-size:.83rem;color:#ef4444">
+        ❌ Cancelled on ${b.cancelledAt ? new Date(b.cancelledAt).toLocaleDateString("en-IN") : "—"}<br/>
+        Cancellation fee: ₹${(b.cancellationFee||0).toLocaleString("en-IN")} &nbsp;|&nbsp;
+        Refund: ₹${(b.refundAmount||0).toLocaleString("en-IN")}
+      </div>` : "";
+
+    // Cancel button with charge preview
+    const charge = !isCancelled ? getCancellationCharge(b) : null;
+    const cancelBtn = !isCancelled ? `
+      <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
+        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:.5rem">
+          ⚠ Cancellation charge: ${charge.pct}% (${charge.label})
+        </p>
+        <button class="btn btn-danger w-full"
+          onclick="event.stopPropagation();cancelBooking('${b.id}')">
+          🚫 Cancel Booking
+        </button>
+      </div>` : "";
+
+    return `<div class="booking-item ${isCancelled ? "booking-cancelled" : ""}" id="booking-${b.id}">
       <div class="booking-item-header" onclick="toggleBookingDetails('${b.id}')">
         <div>
           <div class="booking-id">#${b.id}</div>
-          <div class="booking-route"><span>${b.flight.from}</span><span class="arrow">✈</span><span>${b.flight.to}</span></div>
-          <div style="font-size:.82rem;color:var(--text-muted);margin-top:.25rem">
-            ${b.flight.airline}·${b.flight.depTime}–${b.flight.arrTime}·${b.flight.travelClass}</div>
+          <div class="booking-route">
+            <span>${b.flight?.from||""}</span>
+            <span class="arrow">${b.isRoundTrip ? "⇌" : "✈"}</span>
+            <span>${b.flight?.to||""}</span>
+          </div>
+          <div style="font-size:.82rem;color:var(--text-muted);margin-top:.2rem">
+            ${b.flight?.airline||""} · ${b.flight?.flightNumber||""} · ${b.flight?.depTime||""}–${b.flight?.arrTime||""} · ${b.flight?.travelClass||""}
+          </div>
         </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.5rem">
-          ${badges[b.status]||`<span class="badge badge-muted">${b.status}</span>`}
-          <span style="font-size:.78rem;color:var(--text-muted)">${formatDate(b.createdAt?.split("T")[0])}</span>
-          <span style="font-family:'Syne';font-weight:700;font-size:1.1rem;color:var(--accent)">${formatPrice(b.totalAmount)}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem">
+          ${statusBadge(b)}
+          <span style="font-size:.78rem;color:var(--text-muted)">${b.createdAt ? new Date(b.createdAt).toLocaleDateString("en-IN") : ""}</span>
+          <span style="font-family:'Syne';font-weight:700;font-size:1.05rem;color:var(--accent)">${formatPrice(b.totalAmount)}</span>
         </div>
       </div>
       <div class="booking-item-body" id="details-${b.id}">
-        <h4 style="margin-bottom:.75rem;font-size:.9rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">
-          Passengers (${b.passengers.length})</h4>
-        <div class="passenger-status-list">${paxHtml}</div>
-        ${b.splitFare?`<p style="font-size:.78rem;color:var(--text-muted);margin-top:.75rem">Each share: ${formatPrice(b.perPaxAmount)}</p>`:""}
+        ${returnInfo}
+        <h4 style="margin-bottom:.75rem;font-size:.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">
+          Passengers (${b.passengers.length})
+        </h4>
+        <div class="passenger-status-list">${paxRows}</div>
+        ${b.splitFare ? `<p style="font-size:.78rem;color:var(--text-muted);margin-top:.5rem">Per person: ${formatPrice(b.perPaxAmount)}</p>` : ""}
+        ${cancelInfo}
+        ${cancelBtn}
       </div>
     </div>`;
   }).join("");
@@ -1254,3 +2056,5 @@ document.addEventListener("DOMContentLoaded",()=>{
   if(page==="mybookings.html") initMyBookingsPage();
   if(page==="splitpay.html")   initSplitPayPage();
 });
+
+
