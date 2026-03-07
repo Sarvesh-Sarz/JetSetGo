@@ -15,7 +15,7 @@
 
 
 A fully functional,Full stack , user-friendly, multi-page flight booking web application built with vanilla HTML, CSS, and JavaScript.
-Features real authentication via Firebase, OTP verification via EmailJS, split fare payments, and a standalone passenger payment portal.
+Features real authentication via Supabase, OTP verification via EmailJS, split fare payments, and a standalone passenger payment portal.
 
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -58,8 +58,8 @@ JetSetGo/
 |---|---|
 | HTML5 / CSS3 | Structure and styling |
 | Vanilla JavaScript (ES6+) | All application logic |
-| Firebase Auth | User authentication |
-| Firebase Firestore | Real-time database for bookings |
+| Supabase Auth | User authentication |
+| Supabase | Real-time database for bookings |
 | EmailJS | OTP and payment link emails |
 | Google Fonts | Syne + DM Sans typography |
 
@@ -80,17 +80,13 @@ cd jetsetgo
 1. Go to [console.firebase.google.com](https://console.firebase.google.com)
 2. Create a new project → Register a Web App
 3. Enable **Authentication** → Sign-in method → **Email/Password**
-4. Create **Firestore Database** → Start in test mode
+4. Create **Supabase Database** → Start in test mode
 5. Copy your config and paste it into `script.js`:
 
 ```js
-const FIREBASE_CONFIG = {
+const Supabase_CONFIG = {
   apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID",
+  authurl:        "YOUR_PROJECT_ID.firebaseapp.com",
 };
 ```
 
@@ -173,8 +169,8 @@ Split Fare Payment Links
 - Payment status synced in real time across all devices
 
 Data Storage
-- Firebase Firestore** — bookings, user profiles (when configured)
-- localStorage — session cache, theme preference, fallback when Firebase not configured
+- Supabase** — bookings, user profiles (when configured)
+- localStorage — session cache, theme preference, fallback when Supabase not configured
 - sessionStorage — flight search results, selected flight (temporary)
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -196,9 +192,9 @@ Free Tier Limits
 
 | Service | Free Limit | Typical Usage |
 |---|---|---|
-| Firebase Auth | 10,000 logins/month | Way more than enough |
-| Firestore reads | 50,000/day | ~5 reads per booking view |
-| Firestore writes | 20,000/day | ~1 write per booking |
+| Supabase Auth | 10,000 logins/month | Way more than enough |
+| Supabase reads | 50,000/day | ~5 reads per booking view |
+| Supabase writes | 20,000/day | ~1 write per booking |
 | EmailJS | 200 emails/month | ~2 emails per booking |
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
