@@ -1,52 +1,95 @@
 /**
  * JetSetGo — Premium Flight Booking Application
- * script.js — Firebase + EmailJS powered
+ * script.js — Supabase + EmailJS powered
  */
 
 "use strict";
 
 /* ═══════════════════════════════════════════════════════════════
-   1. FIREBASE CONFIG
-   Setup: console.firebase.google.com → New Project → Web App
-   → Authentication (Email/Password) → Firestore Database (test mode)
+   1. SUPABASE CONFIG
+   Setup: supabase.com → New Project → Settings → API
+   Paste "Project URL" and "anon public" key below
 ═══════════════════════════════════════════════════════════════ */
 
-const FIREBASE_CONFIG = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID",
+const SUPABASE_URL  = "";    // https://xxxx.supabase.co
+const SUPABASE_ANON = "";
+
+
+// Zero-dependency Supabase helper using plain fetch()
+const SB = {
+  headers(extra={}) {
+    const tok = localStorage.getItem("jsg_sb_token");
+    return {
+      "apikey":        SUPABASE_ANON,
+      "Authorization": `Bearer ${tok || SUPABASE_ANON}`,
+      "Content-Type":  "application/json",
+      ...extra,
+    };
+  },
+
+  // ── Auth ──────────────────────────────────────────────────
+  async signUp(email, password) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+      method:"POST", headers: this.headers(),
+      body: JSON.stringify({ email, password }),
+    });
+    const d = await r.json();
+    if (d.error) throw { message: d.error.message || d.msg || JSON.stringify(d), code: d.error.status };
+    return d;
+  },
+  async signIn(email, password) {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method:"POST", headers: this.headers(),
+      body: JSON.stringify({ email, password }),
+    });
+    const d = await r.json();
+    if (d.error || d.error_description) throw { message: d.error_description || d.msg || d.error, code: d.error };
+    return d;  // { access_token, user, ... }
+  },
+  async signOut() {
+    const tok = localStorage.getItem("jsg_sb_token");
+    if (tok) await fetch(`${SUPABASE_URL}/auth/v1/logout`, { method:"POST", headers: this.headers() }).catch(()=>{});
+    localStorage.removeItem("jsg_sb_token");
+    localStorage.removeItem("jsg_sb_uid");
+  },
+
+  // ── Database ──────────────────────────────────────────────
+  async upsert(table, row) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method:"POST",
+      headers: this.headers({ "Prefer":"resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify(row),
+    });
+    if (!r.ok) { const e=await r.text(); console.error(`SB upsert ${table}:`,e); throw new Error(e); }
+  },
+  async select(table, filters={}) {
+    let url = `${SUPABASE_URL}/rest/v1/${table}?`;
+    Object.entries(filters).forEach(([k,v])=>{ url+=`${k}=eq.${encodeURIComponent(v)}&`; });
+    url += "order=created_at.desc";
+    const r = await fetch(url, { headers: this.headers() });
+    if (!r.ok) { console.error(`SB select ${table}:`, await r.text()); return []; }
+    return r.json();
+  },
+  async patch(table, id, data) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
+      method:"PATCH", headers: this.headers({ "Prefer":"return=minimal" }),
+      body: JSON.stringify(data),
+    });
+    if (!r.ok) { const e=await r.text(); console.error(`SB patch ${table}:`,e); throw new Error(e); }
+  },
+  async getById(table, id) {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, { headers: this.headers() });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return rows[0] || null;
+  },
 };
 
-let db, auth;
-let _firebaseReady   = false;
-let _firebaseLoading = false;
-
-function loadFirebase() {
-  return new Promise((resolve) => {
-    if (_firebaseReady) { resolve(true); return; }
-    // Firebase SDK scripts are already in the HTML <head> — just initialise
-    try {
-      if (typeof firebase === "undefined") {
-        console.error("Firebase SDK not found");
-        resolve(false); return;
-      }
-      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-      auth = firebase.auth();
-      db   = firebase.firestore();
-      _firebaseReady = true;
-      resolve(true);
-    } catch (e) {
-      console.error("Firebase init error:", e.code, e.message);
-      resolve(false);
-    }
-  });
+function isSupabaseConfigured() {
+  return SUPABASE_URL !== "YOUR_SUPABASE_URL";
 }
-function isFirebaseConfigured() {
-  return FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
-}
+function isFirebaseConfigured() { return isSupabaseConfigured(); }
+function loadFirebase() { return Promise.resolve(isSupabaseConfigured()); }
 
 /* ═══════════════════════════════════════════════════════════════
    2. EMAILJS CONFIG
@@ -54,12 +97,9 @@ function isFirebaseConfigured() {
    Template variables: {{to_email}}, {{to_name}}, {{otp_code}}
 ═══════════════════════════════════════════════════════════════ */
 
-
-
-const EMAILJS_PUBLIC_KEY   = "YOUR_PUBLIC_KEY_HERE";
-const EMAILJS_SERVICE_ID   = "YOUR_SERVICE_ID_HERE";
-const EMAILJS_OTP_TEMPLATE = "YOUR_OTP_TEMPLATE_ID";
-
+const EMAILJS_PUBLIC_KEY    = "";   // Account → Public Key
+const EMAILJS_SERVICE_ID    = "";   // Email Services → Service ID
+const EMAILJS_OTP_TEMPLATE  = ""; 
 
 let _emailJsReady = false;
 
@@ -197,7 +237,7 @@ function initNav() {
   if (logoutBtn) {
     logoutBtn.style.display = user ? "" : "none";
     logoutBtn.onclick = async () => {
-      if (isFirebaseConfigured() && auth) try { await auth.signOut(); } catch {}
+      if (isSupabaseConfigured()) try { await SB.signOut(); } catch {}
       localStorage.removeItem("jsg_user_profile");
       _currentUserProfile = null;
       window.location.href = "login.html";
@@ -248,33 +288,21 @@ function initLoginPage() {
       console.error("Login timed out after 10s");
     }, 10000);
 
-    if (isFirebaseConfigured()) {
-      console.log("Firebase configured, loading...");
-      const firebaseReady = await loadFirebase();
-      console.log("Firebase ready:", firebaseReady, "auth:", !!auth);
-      if (!firebaseReady || !auth) {
-        clearTimeout(loginTimeout);
-        btn.disabled = false; btn.textContent = "Sign In ✈";
-        const errEl = document.getElementById("login-general-err");
-        errEl.textContent = "⚠ Could not connect to Firebase. Check your internet connection.";
-        errEl.classList.remove("hidden");
-        return;
-      }
+    if (isSupabaseConfigured()) {
       try {
-        console.log("Attempting signIn for:", email);
-        const cred = await auth.signInWithEmailAndPassword(email, password);
-        // Build profile from Firebase Auth data (no Firestore read needed)
-        let profile = { uid: cred.user.uid, name: cred.user.displayName || email.split("@")[0], email };
-        // Try to get extra profile data from Firestore, but don't block on it
+        const data = await SB.signIn(email, password);
+        // Supabase returns user inside data or data.user
+        const user = data.user || data;
+        const uid  = user?.id || user?.sub || generateId();
+        // Store token and uid
+        if (data.access_token) localStorage.setItem("jsg_sb_token", data.access_token);
+        localStorage.setItem("jsg_sb_uid", uid);
+        // Build profile — try users table, fall back to auth data
+        let profile = { uid, email, name: email.split("@")[0] };
         try {
-          const snap = await Promise.race([
-            db.collection("users").doc(cred.user.uid).get(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3000))
-          ]);
-          if (snap.exists) profile = { ...profile, ...snap.data() };
-        } catch (firestoreErr) {
-          console.warn("Firestore profile fetch skipped:", firestoreErr.message);
-        }
+          const rows = await SB.select("users", { id: uid });
+          if (rows.length) profile = { ...profile, name: rows[0].name || profile.name, phone: rows[0].phone || "" };
+        } catch {}
         localStorage.setItem("jsg_user_profile", JSON.stringify(profile));
         clearTimeout(loginTimeout);
         _currentUserProfile = profile;
@@ -286,19 +314,13 @@ function initLoginPage() {
         clearTimeout(loginTimeout);
         btn.disabled = false; btn.textContent = "Sign In ✈";
         const errEl = document.getElementById("login-general-err");
-        const msgs = {
-          "auth/user-not-found":       "⚠ No account found with this email. Please sign up first.",
-          "auth/wrong-password":       "⚠ Incorrect password. Please try again.",
-          "auth/invalid-credential":   "⚠ Invalid email or password.",
-          "auth/invalid-email":        "⚠ Please enter a valid email address.",
-          "auth/too-many-requests":    "⚠ Too many failed attempts. Please wait a few minutes.",
-          "auth/network-request-failed": "⚠ Network error. Check your connection.",
-          "auth/operation-not-allowed":  "⚠ Email/Password login not enabled. Go to Firebase Console → Authentication → Sign-in method → Enable Email/Password.",
-          "auth/invalid-api-key":        "⚠ Invalid Firebase API key — check script.js.",
-        };
-        errEl.textContent = msgs[err.code] || `⚠ Login failed: ${err.message} (${err.code})`;
+        const msg = String(err.message || err.code || err);
+        if (msg.includes("Invalid login"))          errEl.textContent = "⚠ Incorrect email or password.";
+        else if (msg.includes("Email not confirmed")) errEl.textContent = "⚠ Please confirm your email first — check your inbox.";
+        else if (msg.includes("network") || msg.includes("fetch")) errEl.textContent = "⚠ Network error. Check your connection.";
+        else errEl.textContent = `⚠ Login failed: ${msg}`;
         errEl.classList.remove("hidden");
-        console.error("Login error:", err.code, err.message);
+        console.error("Login error:", err);
       }
     } else {
       // Fallback localStorage
@@ -364,69 +386,42 @@ function initSignupPage() {
 
     const errEl = document.getElementById("signup-general-err");
 
-    if (!isFirebaseConfigured()) {
+    if (!isSupabaseConfigured()) {
       clearTimeout(signupTimeout);
       btn.disabled = false; btn.textContent = "Create Account ✈";
-      errEl.textContent = "⚠ Firebase not configured. Open script.js and replace YOUR_API_KEY with your real Firebase config.";
+      errEl.textContent = "⚠ Supabase not configured — paste your URL and anon key into script.js.";
       errEl.classList.remove("hidden");
       return;
     }
 
-    if (isFirebaseConfigured()) {
-      console.log("Firebase configured, loading for signup...");
-      const firebaseReady = await loadFirebase();
-      console.log("Firebase ready:", firebaseReady, "auth:", !!auth);
-      if (!firebaseReady || !auth) {
-        clearTimeout(signupTimeout);
-        btn.disabled = false; btn.textContent = "Create Account ✈";
-        errEl.textContent = "⚠ Could not connect to Firebase. Check your internet connection.";
-        errEl.classList.remove("hidden");
-        return;
-      }
-      try {
-        console.log("Attempting createUser for:", email);
-        const cred    = await auth.createUserWithEmailAndPassword(email, password);
-        const profile = { uid: cred.user.uid, name, email, phone };
-        // Save to Firestore — non-blocking
-        db.collection("users").doc(cred.user.uid).set(profile).catch(e => {
-          console.warn("Firestore profile save failed (non-critical):", e.message);
-        });
-        clearTimeout(signupTimeout);
-        localStorage.setItem("jsg_user_profile", JSON.stringify(profile));
-        _currentUserProfile = profile;
-        showToast("Account created! Welcome aboard ✈", "success");
-        setTimeout(() => { window.location.href = sessionStorage.getItem("jsg_redirect") || "index.html"; }, 800);
-      } catch (err) {
-        clearTimeout(signupTimeout);
-        btn.disabled = false; btn.textContent = "Create Account ✈";
-        const msgs = {
-          "auth/email-already-in-use":    "⚠ An account already exists with this email. Try logging in instead.",
-          "auth/weak-password":           "⚠ Password must be at least 6 characters.",
-          "auth/network-request-failed":  "⚠ Network error. Check your connection.",
-          "auth/configuration-not-found": "⚠ Firebase not configured correctly — check your API keys in script.js.",
-          "auth/invalid-api-key":         "⚠ Invalid Firebase API key — check script.js lines 14–20.",
-          "auth/operation-not-allowed":   "⚠ Email/Password sign-in is not enabled. Go to Firebase Console → Authentication → Sign-in method → Enable Email/Password.",
-          "auth/admin-restricted-operation": "⚠ Email/Password sign-in is not enabled in Firebase Console.",
-        };
-        errEl.textContent = msgs[err.code] || `⚠ Signup failed: ${err.message} (${err.code})`;
-        errEl.classList.remove("hidden");
-        console.error("Signup error:", err.code, err.message);
-      }
-    } else {
-      const users = JSON.parse(localStorage.getItem("jsg_users") || "[]");
-      if (users.find(u => u.email === email)) {
-        btn.disabled = false; btn.textContent = "Create Account ✈";
-        const errEl = document.getElementById("signup-general-err");
-        errEl.textContent = "⚠ Account already exists."; errEl.classList.remove("hidden");
-        return;
-      }
-      const profile = { uid:generateId(), name, email, phone, password };
-      users.push(profile);
-      localStorage.setItem("jsg_users", JSON.stringify(users));
+    try {
+      const data = await SB.signUp(email, password);
+      const token = data.access_token || data.session?.access_token;
+      const uid   = data.user?.id;
+      if (token) localStorage.setItem("jsg_sb_token", token);
+      if (uid)   localStorage.setItem("jsg_sb_uid", uid);
+      if (uid) SB.upsert("users", { id: uid, name, email, phone }).catch(()=>{});
+      clearTimeout(signupTimeout);
+      const profile = { uid: uid || generateId(), name, email, phone };
       localStorage.setItem("jsg_user_profile", JSON.stringify(profile));
       _currentUserProfile = profile;
-      showToast("Account created! Welcome aboard ✈", "success");
-      setTimeout(() => { window.location.href = "index.html"; }, 800);
+      if (!token) {
+        showToast("Account created! Check your email to confirm, then sign in. ✈", "success", 7000);
+        setTimeout(() => { window.location.href = "login.html"; }, 2500);
+      } else {
+        showToast("Account created! Welcome aboard ✈", "success");
+        setTimeout(() => { window.location.href = sessionStorage.getItem("jsg_redirect") || "index.html"; }, 800);
+      }
+    } catch (err) {
+      clearTimeout(signupTimeout);
+      btn.disabled = false; btn.textContent = "Create Account ✈";
+      const msg = String(err.message || err);
+      if (msg.toLowerCase().includes("already"))        errEl.textContent = "⚠ An account already exists with this email. Try logging in.";
+      else if (msg.toLowerCase().includes("password"))  errEl.textContent = "⚠ Password must be at least 6 characters.";
+      else if (msg.toLowerCase().includes("email"))     errEl.textContent = "⚠ Please enter a valid email address.";
+      else                                               errEl.textContent = "⚠ Signup failed: " + msg;
+      errEl.classList.remove("hidden");
+      console.error("Signup error:", err);
     }
   });
 }
@@ -1553,43 +1548,36 @@ async function showSplitFareFlow(flight) {
 ═══════════════════════════════════════════════════════════════ */
 
 async function saveBooking(booking) {
-  if (isFirebaseConfigured()) {
-    await loadFirebase();
-    try {
-      await db.collection("bookings").doc(booking.id).set(booking);
-      console.log("✅ Booking saved to Firebase:", booking.id);
-      // Also save to localStorage as backup
-      const all=JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
-      const idx=all.findIndex(b=>b.id===booking.id);
-      if (idx>=0) all[idx]=booking; else all.push(booking);
-      localStorage.setItem("jsg_bookings",JSON.stringify(all));
-      return;
-    } catch(e) {
-      console.error("❌ Firebase save failed:", e.code, e.message);
-      if (e.code === "permission-denied") {
-        showToast("⚠ Firebase rules blocking save. Go to Firestore → Rules → set allow read,write: if true → Publish", "error", 8000);
-      } else if (e.code === "not-found" || e.code === "unavailable") {
-        showToast("⚠ Firestore not set up yet. Create database in Firebase Console first.", "error", 8000);
-      } else {
-        showToast(`⚠ Cloud save failed: ${e.message}. Saved locally.`, "warning", 6000);
-      }
-    }
-  } else {
-    console.warn("⚠ Firebase not configured — saving to localStorage only");
-  }
-  // Fallback: localStorage
+  // Always save to localStorage first (instant, offline-safe)
   const all=JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
   const idx=all.findIndex(b=>b.id===booking.id);
   if (idx>=0) all[idx]=booking; else all.push(booking);
   localStorage.setItem("jsg_bookings",JSON.stringify(all));
+
+  // Also sync to Supabase if configured
+  if (isSupabaseConfigured()) {
+    try {
+      // Flatten booking to a JSON-safe object for Supabase
+      await SB.upsert("bookings", { id: booking.id, user_id: booking.userId, data: booking, created_at: booking.createdAt });
+      console.log("✅ Booking synced to Supabase:", booking.id);
+    } catch(e) {
+      console.warn("Supabase sync failed (saved locally):", e.message);
+    }
+  }
 }
 
 async function loadBookingById(bookingId) {
-  if (isFirebaseConfigured()) {
-    await loadFirebase();
-    try { const s=await db.collection("bookings").doc(bookingId).get(); return s.exists?s.data():null; } catch(e){console.error(e);}
+  // Try localStorage first (fastest)
+  const local = JSON.parse(localStorage.getItem("jsg_bookings")||"[]").find(b=>b.id===bookingId);
+  if (local) return local;
+  // Try Supabase
+  if (isSupabaseConfigured()) {
+    try {
+      const row = await SB.getById("bookings", bookingId);
+      if (row) return JSON.parse(row.data);
+    } catch(e) { console.warn("Supabase loadBookingById failed:", e.message); }
   }
-  return JSON.parse(localStorage.getItem("jsg_bookings")||"[]").find(b=>b.id===bookingId)||null;
+  return null;
 }
 
 async function updateBooking(booking) {
@@ -1647,16 +1635,10 @@ async function cancelBooking(bookingId) {
   }
   localStorage.setItem("jsg_bookings", JSON.stringify(all));
 
-  // Update Firebase
-  if (isFirebaseConfigured()) {
-    await loadFirebase();
-    try {
-      await db.collection("bookings").doc(bookingId).update({
-        status: "Cancelled", cancelledAt: now,
-        cancellationFee: fee, refundAmount: refund
-      });
-      console.log("✅ Cancellation saved to Firebase");
-    } catch(e) { console.error("Firebase cancel failed:", e.message); }
+  // Sync cancellation to Supabase
+  if (isSupabaseConfigured()) {
+    const updated = _allBookings.find(b => b.id === bookingId);
+    if (updated) SB.upsert("bookings", { id: bookingId, user_id: updated.userId, data: updated, created_at: updated.createdAt }).catch(()=>{});
   }
 
   showToast(`Booking cancelled. Refund of ₹${refund.toLocaleString("en-IN")} will be processed in 5–7 days.`, "success", 6000);
@@ -1664,25 +1646,27 @@ async function cancelBooking(bookingId) {
 }
 
 async function loadUserBookings() {
-  const user=getLoggedInUser(); if (!user) return [];
-  if (isFirebaseConfigured()) {
-    await loadFirebase();
+  const user = getLoggedInUser(); if (!user) return [];
+  const uid  = user.uid || user.id || "guest";
+
+  // Try Supabase first
+  if (isSupabaseConfigured()) {
     try {
-      const snap=await db.collection("bookings")
-        .where("userId","==",user.uid||user.id||"guest")
-        .orderBy("createdAt","desc")
-        .get();
-      const fbBookings = snap.docs.map(d=>d.data());
-      console.log("✅ Loaded", fbBookings.length, "bookings from Firebase");
-      return fbBookings;
-    } catch(e) {
-      console.error("❌ Firebase load failed:", e.code, e.message);
-      // Fall through to localStorage
-    }
+      const rows = await SB.select("bookings", { user_id: uid });
+      if (rows.length) {
+        const parsed = rows.map(r => r.data).filter(Boolean);
+        console.log("✅ Loaded", parsed.length, "bookings from Supabase");
+        // Merge into localStorage
+        const all = JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
+        parsed.forEach(b => { const i=all.findIndex(x=>x.id===b.id); if(i>=0) all[i]=b; else all.push(b); });
+        localStorage.setItem("jsg_bookings", JSON.stringify(all));
+        return parsed;
+      }
+    } catch(e) { console.warn("Supabase load failed, using localStorage:", e.message); }
   }
+
   // Fallback: localStorage
-  const uid = user.uid||user.id||"guest";
-  const all = JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
+  const all   = JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
   const local = all.filter(b=>b.userId===uid).reverse();
   console.log("📦 Loaded", local.length, "bookings from localStorage");
   return local;
@@ -2047,14 +2031,13 @@ function showError(id,show,msg){
 document.addEventListener("DOMContentLoaded",()=>{
   initTheme();
   initNav();
-  const page=window.location.pathname.split("/").pop()||"index.html";
-  if(page==="index.html"||page===""||page==="/") initHomePage();
-  if(page==="login.html")      initLoginPage();
-  if(page==="signup.html")     initSignupPage();
-  if(page==="flights.html")    initFlightsPage();
-  if(page==="booking.html")    initBookingPage();
-  if(page==="mybookings.html") initMyBookingsPage();
-  if(page==="splitpay.html")   initSplitPayPage();
+  const raw  = window.location.pathname.split("/").pop() || "";
+  const page = raw.replace(".html","") || "index";
+  if(page==="index"||page===""||page==="/") initHomePage();
+  if(page==="login")      initLoginPage();
+  if(page==="signup")     initSignupPage();
+  if(page==="flights")    initFlightsPage();
+  if(page==="booking")    initBookingPage();
+  if(page==="mybookings") initMyBookingsPage();
+  if(page==="splitpay")   initSplitPayPage();
 });
-
-
