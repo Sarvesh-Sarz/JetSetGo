@@ -11,9 +11,8 @@
    Paste "Project URL" and "anon public" key below
 ═══════════════════════════════════════════════════════════════ */
 
-const SUPABASE_URL  = "";    // https://xxxx.supabase.co
+const SUPABASE_URL  = "";  
 const SUPABASE_ANON = "";
-
 
 // Zero-dependency Supabase helper using plain fetch()
 const SB = {
@@ -97,9 +96,10 @@ function loadFirebase() { return Promise.resolve(isSupabaseConfigured()); }
    Template variables: {{to_email}}, {{to_name}}, {{otp_code}}
 ═══════════════════════════════════════════════════════════════ */
 
-const EMAILJS_PUBLIC_KEY    = "";   // Account → Public Key
-const EMAILJS_SERVICE_ID    = "";   // Email Services → Service ID
-const EMAILJS_OTP_TEMPLATE  = ""; 
+const EMAILJS_PUBLIC_KEY   = "";
+const EMAILJS_SERVICE_ID   = "";
+const EMAILJS_OTP_TEMPLATE     = "";
+const EMAILJS_PAYMENT_TEMPLATE = ""; 
 
 let _emailJsReady = false;
 
@@ -148,7 +148,6 @@ async function sendOtpEmail(toEmail, toName, otp) {
 }
 
 async function sendPaymentLinkEmail(toEmail, toName, paymentLink, amount, bookingId) {
-  const body = `Booking ID: ${bookingId}\nYour share: ${amount}\n\nPay here:\n${paymentLink}`;
   if (!isEmailJsConfigured()) {
     console.log("Payment link for", toName, ":", paymentLink);
     showToast(`📧 Demo — link for ${toName} logged to console`, "info", 8000);
@@ -157,9 +156,26 @@ async function sendPaymentLinkEmail(toEmail, toName, paymentLink, amount, bookin
   const ready = await loadEmailJS();
   if (!ready) return false;
   try {
-    await window.emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_OTP_TEMPLATE, {
-      to_email: toEmail, to_name: toName, otp_code: body,
-    });
+    // Use Order Confirmation template if configured, else fall back to OTP template
+    const usePaymentTemplate = typeof EMAILJS_PAYMENT_TEMPLATE !== "undefined"
+      && EMAILJS_PAYMENT_TEMPLATE !== "YOUR_ORDER_CONFIRMATION_TEMPLATE_ID";
+    const templateId = usePaymentTemplate ? EMAILJS_PAYMENT_TEMPLATE : EMAILJS_OTP_TEMPLATE;
+    const params = usePaymentTemplate
+      ? {
+          to_email:     toEmail,
+          to_name:      toName,
+          email:        toEmail,
+          message:      `You've been added to group booking #${bookingId}.`,
+          amount:       amount,
+          payment_link: paymentLink,
+          booking_id:   bookingId,
+        }
+      : {
+          to_email: toEmail,
+          to_name:  toName,
+          otp_code: `You've been added to booking #${bookingId}.\nYour share: ${amount}\nPay here: ${paymentLink}`,
+        };
+    await window.emailjs.send(EMAILJS_SERVICE_ID, templateId, params);
     showToast(`📧 Payment link sent to ${toEmail}!`, "success");
     return true;
   } catch (err) {
@@ -1107,7 +1123,22 @@ function initBookingPage() {
     document.getElementById("split-fare-section").style.display = "";
     document.getElementById("split-fare-checkbox")?.addEventListener("change", function () {
       document.getElementById("split-phones-container").classList.toggle("hidden", !this.checked);
-      if (this.checked) renderSplitEmailInputs(flight.passengers);
+      if (this.checked) {
+        // Hide passenger forms 2..N — only booker fills their own details
+        for (let i = 2; i <= flight.passengers; i++) {
+          const card = document.querySelector(`#passenger-forms-container .passenger-form-card:nth-child(${i})`);
+          if (card) card.style.display = "none";
+        }
+        // Show note that others only need email
+        renderSplitEmailInputs(flight.passengers);
+      } else {
+        // Restore all passenger forms
+        for (let i = 2; i <= flight.passengers; i++) {
+          const card = document.querySelector(`#passenger-forms-container .passenger-form-card:nth-child(${i})`);
+          if (card) card.style.display = "";
+        }
+        document.getElementById("split-phone-inputs").innerHTML = "";
+      }
     });
   }
 
@@ -1210,8 +1241,11 @@ function renderPassengerForms(count, flight) {
 }
 
 function validatePassengerForms(count) {
+  const isSplit = document.getElementById("split-fare-checkbox")?.checked;
+  // When split fare: only validate passenger 1 (others only provide email via split section)
+  const validateCount = isSplit ? 1 : count;
   let valid = true;
-  for (let i=1;i<=count;i++) {
+  for (let i=1;i<=validateCount;i++) {
     const name  = document.getElementById(`p${i}-name`)?.value.trim();
     const age   = document.getElementById(`p${i}-age`)?.value;
     const gender= document.getElementById(`p${i}-gender`)?.value;
@@ -1502,45 +1536,114 @@ async function completeBooking(flight) {
 }
 
 async function showSplitFareFlow(flight) {
-  const user       = getLoggedInUser();
-  const passengers = collectPassengerData(flight.passengers);
-  const tax        = Math.round(flight.price*.18);
-  const total      = (flight.price+tax)*flight.passengers+200;
-  const perPax     = Math.ceil(total/flight.passengers);
-  const bookingId  = "JSG"+Date.now().toString().slice(-8).toUpperCase();
+  const user      = getLoggedInUser();
+  const p1Data    = collectPassengerData(1)[0]; // only passenger 1 filled in
+  const tax       = Math.round(flight.price * .18);
+  const total     = (flight.price + tax) * flight.passengers + 200;
+  const perPax    = Math.ceil(total / flight.passengers);
+  const bookingId = "JSG" + Date.now().toString().slice(-8).toUpperCase();
 
-  // Passenger 1 = primary booker — use their email from passenger form
-  const p1Email = document.getElementById("p1-email")?.value.trim() || passengers[0]?.email || "";
-  const splitEmails = Array.from({length:flight.passengers},(_,i)=>
-    i===0 ? p1Email : (document.getElementById(`split-email-${i+1}`)?.value.trim()||"")  );
+  // Co-passenger emails from split section
+  const coEmails = Array.from({length: flight.passengers - 1}, (_, i) =>
+    document.getElementById(`split-email-${i + 2}`)?.value.trim() || ""
+  );
+
+  // Build placeholder passengers for co-passengers (details unknown until they pay)
+  const allPassengers = [
+    {
+      ...p1Data,
+      splitEmail:    p1Data.email,
+      paymentStatus: "Pending", // will be paid immediately after OTP
+      shareAmount:   perPax,
+      payToken:      generateId(),
+      isPrimary:     true,
+    },
+    ...coEmails.map((email, i) => ({
+      name:          `Passenger ${i + 2}`,
+      age:           "",
+      gender:        "",
+      phone:         "",
+      email:         email,
+      splitEmail:    email,
+      paymentStatus: "Pending",
+      shareAmount:   perPax,
+      payToken:      generateId(),
+      isPrimary:     false,
+    }))
+  ];
 
   const booking = {
-    id:bookingId, userId:user?.uid||user?.id||"guest",
-    userName:user?.name||"Guest", userEmail:user?.email||"",
+    id: bookingId,
+    userId:    user?.uid || user?.id || "guest",
+    userName:  user?.name || "Guest",
+    userEmail: user?.email || "",
     flight,
-    passengers: passengers.map((p,i)=>({
-      ...p,
-      splitEmail:   splitEmails[i]||p.email,
-      paymentStatus:"Pending",
-      shareAmount:  perPax,
-      payToken:     generateId(),
-    })),
-    status:"Pending", splitFare:true,
-    totalAmount:total, perPaxAmount:perPax,
-    createdAt:new Date().toISOString(),
+    passengers: allPassengers,
+    status:       "Pending",
+    splitFare:    true,
+    totalAmount:  total,
+    perPaxAmount: perPax,
+    createdAt:    new Date().toISOString(),
   };
 
   await saveBooking(booking);
 
-  // Send individual payment links
-  const baseUrl = window.location.href.replace("booking.html","splitpay.html");
-  const promises = booking.passengers.map(p=>{
+  // Send payment links to co-passengers immediately
+  const baseUrl = window.location.href.replace("booking.html", "splitpay.html");
+  const coPromises = allPassengers.slice(1).map(p => {
     const link = `${baseUrl}?booking=${bookingId}&token=${p.payToken}&name=${encodeURIComponent(p.name)}`;
     return sendPaymentLinkEmail(p.splitEmail, p.name, link, formatPrice(perPax), bookingId);
   });
-  await Promise.allSettled(promises);
-  showToast(`📧 Payment links sent to all ${flight.passengers} passengers!`,"success");
-  setTimeout(()=>{ window.location.href="mybookings.html"; },1200);
+  await Promise.allSettled(coPromises);
+
+  // Now let primary booker pay their share via email OTP
+  showToast(`📧 Payment links sent to ${flight.passengers - 1} co-passenger(s)! Now verify your email to pay your share.`, "success", 4000);
+  setTimeout(() => openSplitBookerPayment(booking), 1500);
+}
+
+// OTP verification + immediate payment for primary booker in split fare
+async function openSplitBookerPayment(booking) {
+  // OTP was already verified in the booking flow — go straight to payment
+  const modal = document.getElementById("payment-modal");
+  const body  = document.getElementById("payment-modal-body");
+  if (!modal || !body) { window.location.href = "mybookings.html"; return; }
+
+  const amount = formatPrice(booking.perPaxAmount);
+
+  body.innerHTML = `
+    <div style="text-align:center;margin-bottom:1.5rem">
+      <div style="font-size:2.5rem;margin-bottom:.5rem">💳</div>
+      <h3 style="font-family:'Syne';font-size:1.3rem;margin-bottom:.25rem">Pay Your Share</h3>
+      <p style="color:var(--text-muted);font-size:.85rem">Co-passengers have been emailed their payment links.</p>
+    </div>
+    <div class="card-visual" style="text-align:left;margin-bottom:1.25rem">
+      <div class="card-brand">JetSetGo Pay</div>
+      <div class="card-number">•••• •••• •••• 4242</div>
+      <div class="card-meta"><span>12/28</span><span>VISA</span></div>
+    </div>
+    <div style="text-align:center;margin-bottom:1.25rem">
+      <div style="font-size:.85rem;color:var(--text-muted)">Your share</div>
+      <div style="font-family:'Syne';font-size:2rem;font-weight:800;color:var(--accent)">${amount}</div>
+    </div>
+    <button class="btn btn-primary btn-lg w-full" id="split-booker-pay-btn">💳 Pay ${amount}</button>
+  `;
+
+  modal.classList.remove("hidden");
+
+  document.getElementById("split-booker-pay-btn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("split-booker-pay-btn");
+    btn.disabled = true; btn.textContent = "Processing…";
+    await new Promise(r => setTimeout(r, 1800));
+
+    booking.passengers[0].paymentStatus = "Paid";
+    const allPaid = booking.passengers.every(p => p.paymentStatus === "Paid");
+    booking.status = allPaid ? "Fully Paid" : "Partially Paid";
+    await saveBooking(booking);
+
+    modal.classList.add("hidden");
+    showToast("✅ Your share is paid! Co-passengers will pay via their email links.", "success", 5000);
+    setTimeout(() => { window.location.href = "mybookings.html"; }, 1500);
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1574,7 +1677,10 @@ async function loadBookingById(bookingId) {
   if (isSupabaseConfigured()) {
     try {
       const row = await SB.getById("bookings", bookingId);
-      if (row) return JSON.parse(row.data);
+      if (row) {
+        // data column is json type — already an object, no JSON.parse needed
+        return typeof row.data === "string" ? JSON.parse(row.data) : row.data;
+      }
     } catch(e) { console.warn("Supabase loadBookingById failed:", e.message); }
   }
   return null;
@@ -1647,16 +1753,16 @@ async function cancelBooking(bookingId) {
 
 async function loadUserBookings() {
   const user = getLoggedInUser(); if (!user) return [];
-  const uid  = user.uid || user.id || "guest";
+  const uid   = user.uid || user.id || "guest";
+  const email = user.email || "";
 
   // Try Supabase first
   if (isSupabaseConfigured()) {
     try {
       const rows = await SB.select("bookings", { user_id: uid });
-      if (rows.length) {
-        const parsed = rows.map(r => r.data).filter(Boolean);
+      const parsed = rows.map(r => typeof r.data === "string" ? JSON.parse(r.data) : r.data).filter(Boolean);
+      if (parsed.length) {
         console.log("✅ Loaded", parsed.length, "bookings from Supabase");
-        // Merge into localStorage
         const all = JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
         parsed.forEach(b => { const i=all.findIndex(x=>x.id===b.id); if(i>=0) all[i]=b; else all.push(b); });
         localStorage.setItem("jsg_bookings", JSON.stringify(all));
@@ -1665,9 +1771,12 @@ async function loadUserBookings() {
     } catch(e) { console.warn("Supabase load failed, using localStorage:", e.message); }
   }
 
-  // Fallback: localStorage
+  // Fallback: localStorage — also include split fare bookings where user is a co-passenger
   const all   = JSON.parse(localStorage.getItem("jsg_bookings")||"[]");
-  const local = all.filter(b=>b.userId===uid).reverse();
+  const local = all.filter(b =>
+    b.userId === uid ||
+    (email && b.splitFare && b.passengers?.some(p => p.splitEmail === email || p.email === email))
+  ).reverse();
   console.log("📦 Loaded", local.length, "bookings from localStorage");
   return local;
 }
@@ -1832,36 +1941,74 @@ async function resendPaymentLink(bookingId, token, name, email, amount) {
 let _spState={bookingId:null,token:null,generatedOtp:null,timerInterval:null,verifiedEmail:""};
 
 async function initSplitPayPage() {
-  const container=document.getElementById("splitpay-container"); if(!container) return;
-  const p=new URLSearchParams(window.location.search);
-  const bookingId=p.get("booking"), token=p.get("token"), pName=decodeURIComponent(p.get("name")||"");
+  const container = document.getElementById("splitpay-container");
+  if (!container) return;
 
-  if (!bookingId||!token) {
-    container.innerHTML=`<div class="empty-state"><h3>Invalid Link</h3><p>This link is invalid or has expired.</p></div>`;
-    return;
-  }
-  container.innerHTML=`<div class="loader-wrap"><div class="spinner"></div><p class="loader-text">Loading…</p></div>`;
+  const p         = new URLSearchParams(window.location.search);
+  const bookingId = p.get("booking");
+  const token     = p.get("token");
+  const pName     = decodeURIComponent(p.get("name") || "");
 
-  const booking=await loadBookingById(bookingId);
-  if (!booking) { container.innerHTML=`<div class="empty-state"><h3>Booking Not Found</h3></div>`; return; }
-
-  const passenger=booking.passengers.find(p=>p.payToken===token);
-  if (!passenger) { container.innerHTML=`<div class="empty-state"><h3>Invalid Token</h3></div>`; return; }
-
-  if (passenger.paymentStatus==="Paid") {
-    container.innerHTML=`<div class="payment-success-anim" style="text-align:center;padding:3rem">
-      <div class="circle">✅</div><h3>Already Paid!</h3>
-      <p>Your payment for <strong>#${bookingId}</strong> is complete.</p></div>`;
+  if (!bookingId || !token) {
+    container.innerHTML = `<div class="empty-state"><h3>Invalid Link</h3><p>This link is invalid or has expired.</p></div>`;
     return;
   }
 
-  _spState={bookingId,token,generatedOtp:null,timerInterval:null,verifiedEmail:"",booking,passenger};
+  // ── Must be logged in ─────────────────────────────────────────
+  const user = getLoggedInUser();
+  if (!user) {
+    // Save the full URL so we can return here after login
+    sessionStorage.setItem("jsg_redirect", window.location.href);
+    container.innerHTML = `
+      <div class="empty-state" style="padding:3rem 1.5rem;text-align:center">
+        <div style="font-size:3rem;margin-bottom:1rem">✈</div>
+        <h3 style="margin-bottom:.5rem">Sign in to Pay</h3>
+        <p style="color:var(--text-muted);margin-bottom:1.5rem">
+          You need a JetSetGo account to complete your payment for booking <strong>#${bookingId}</strong>.
+        </p>
+        <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+          <a href="login.html" class="btn btn-primary">Sign In</a>
+          <a href="signup.html" class="btn btn-ghost">Create Account</a>
+        </div>
+        <p style="font-size:.8rem;color:var(--text-muted);margin-top:1rem">
+          After signing in you'll be brought back here automatically.
+        </p>
+      </div>`;
+    return;
+  }
 
-  container.innerHTML=`
+  container.innerHTML = `<div class="loader-wrap"><div class="spinner"></div><p class="loader-text">Loading booking…</p></div>`;
+
+  const booking = await loadBookingById(bookingId);
+  if (!booking) {
+    container.innerHTML = `<div class="empty-state"><h3>Booking Not Found</h3><p>We couldn't find booking <strong>#${bookingId}</strong>. It may not have synced yet — try checking My Bookings.</p><a href="mybookings.html" class="btn btn-primary" style="margin-top:1rem">My Bookings</a></div>`;
+    return;
+  }
+
+  const passenger = booking.passengers.find(p => p.payToken === token);
+  if (!passenger) {
+    container.innerHTML = `<div class="empty-state"><h3>Invalid Payment Link</h3><p>This payment link is not valid for this booking.</p></div>`;
+    return;
+  }
+
+  if (passenger.paymentStatus === "Paid") {
+    container.innerHTML = `
+      <div style="text-align:center;padding:3rem">
+        <div style="font-size:3rem;margin-bottom:1rem">✅</div>
+        <h3>Already Paid!</h3>
+        <p>Your share of <strong>${formatPrice(booking.perPaxAmount)}</strong> for booking <strong>#${bookingId}</strong> is confirmed.</p>
+        <a href="mybookings.html" class="btn btn-primary" style="margin-top:1.5rem">View My Bookings</a>
+      </div>`;
+    return;
+  }
+
+  _spState = { bookingId, token, generatedOtp: null, timerInterval: null, verifiedEmail: "", booking, passenger };
+
+  container.innerHTML = `
   <div class="split-link-card card">
     <div style="font-size:2.5rem;margin-bottom:1rem">✈</div>
     <h2>Complete Your Payment</h2>
-    <p>Hi <strong>${passenger.name}</strong>! You've been added to a group booking.</p>
+    <p>Hi <strong>${user.name || passenger.name}</strong>! You've been added to a group booking.</p>
     <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:1rem;margin:1.5rem 0;text-align:left">
       <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.5rem;text-transform:uppercase;font-weight:600">Booking Details</div>
       <div><strong>${booking.flight.from} → ${booking.flight.to}</strong></div>
@@ -1870,12 +2017,15 @@ async function initSplitPayPage() {
         Your share: ${formatPrice(booking.perPaxAmount)}</div>
     </div>
 
-    <!-- Step 1: Email input -->
+    <!-- Step 1: Email OTP -->
     <div id="sp-step1">
+      <p style="font-size:.88rem;color:var(--text-muted);margin-bottom:1rem">
+        We'll send a one-time password to verify your identity before payment.
+      </p>
       <div class="form-group" style="text-align:left;margin-bottom:1rem">
-        <label class="form-label">Your Email Address (to receive OTP)</label>
+        <label class="form-label">Your Email Address</label>
         <input type="email" class="form-control" id="sp-email"
-          placeholder="you@example.com" value="${passenger.splitEmail||""}" />
+          placeholder="you@example.com" value="${user.email || passenger.splitEmail || ""}" />
         <span class="form-error hidden" id="sp-email-err">⚠ Valid email required.</span>
       </div>
       <button class="btn btn-primary w-full" id="sp-send-btn">📧 Send OTP</button>
@@ -1915,72 +2065,71 @@ async function initSplitPayPage() {
   </div>`;
 
   // Step 1: send OTP
-  document.getElementById("sp-send-btn")?.addEventListener("click", async ()=>{
-    const email=document.getElementById("sp-email")?.value.trim();
-    if (!email||!isValidEmail(email)) { showError("sp-email-err",true); return; }
-    showError("sp-email-err",false);
-    _spState.generatedOtp=String(Math.floor(100000+Math.random()*900000));
-    _spState.verifiedEmail=email;
-    const btn=document.getElementById("sp-send-btn");
-    btn.disabled=true; btn.textContent="Sending…";
-    await sendOtpEmail(email, passenger.name, _spState.generatedOtp);
-    btn.disabled=false; btn.innerHTML="📧 Send OTP";
+  document.getElementById("sp-send-btn")?.addEventListener("click", async () => {
+    const email = document.getElementById("sp-email")?.value.trim();
+    if (!email || !isValidEmail(email)) { showError("sp-email-err", true); return; }
+    showError("sp-email-err", false);
+    _spState.generatedOtp  = String(Math.floor(100000 + Math.random() * 900000));
+    _spState.verifiedEmail = email;
+    const btn = document.getElementById("sp-send-btn");
+    btn.disabled = true; btn.textContent = "Sending…";
+    await sendOtpEmail(email, user.name || passenger.name, _spState.generatedOtp);
+    btn.disabled = false; btn.innerHTML = "📧 Send OTP";
     document.getElementById("sp-step1").classList.add("hidden");
     document.getElementById("sp-step2").classList.remove("hidden");
-    const s=document.getElementById("sp-sent-to");
-    if(s) s.textContent=`OTP sent to ${email}`;
+    const s = document.getElementById("sp-sent-to");
+    if (s) s.textContent = `OTP sent to ${email}`;
     setupOtpDigits("sp-otp-digit");
     startOtpTimer("sp-timer", _spState);
   });
 
   // Step 2: verify OTP
-  document.getElementById("sp-verify-btn")?.addEventListener("click",()=>{
-    const entered=getOtpValue("sp-otp-digit");
-    if (entered.length<6) { showError("sp-otp-err",true,"⚠ Enter all 6 digits."); return; }
-    if (entered!==_spState.generatedOtp) { showError("sp-otp-err",true,"⚠ Incorrect OTP."); clearOtpDigits("sp-otp-digit"); return; }
-    showError("sp-otp-err",false);
+  document.getElementById("sp-verify-btn")?.addEventListener("click", () => {
+    const entered = getOtpValue("sp-otp-digit");
+    if (entered.length < 6) { showError("sp-otp-err", true, "⚠ Enter all 6 digits."); return; }
+    if (entered !== _spState.generatedOtp) { showError("sp-otp-err", true, "⚠ Incorrect OTP."); clearOtpDigits("sp-otp-digit"); return; }
+    showError("sp-otp-err", false);
     clearInterval(_spState.timerInterval);
     document.getElementById("sp-step2").classList.add("hidden");
     document.getElementById("sp-step3").classList.remove("hidden");
-    showToast("✅ OTP Verified!","success");
+    showToast("✅ OTP Verified!", "success");
   });
 
-  document.getElementById("sp-resend-btn")?.addEventListener("click", async ()=>{
-    _spState.generatedOtp=String(Math.floor(100000+Math.random()*900000));
-    await sendOtpEmail(_spState.verifiedEmail, passenger.name, _spState.generatedOtp);
+  document.getElementById("sp-resend-btn")?.addEventListener("click", async () => {
+    _spState.generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
+    await sendOtpEmail(_spState.verifiedEmail, user.name || passenger.name, _spState.generatedOtp);
     clearInterval(_spState.timerInterval);
-    startOtpTimer("sp-timer",_spState);
+    startOtpTimer("sp-timer", _spState);
     clearOtpDigits("sp-otp-digit");
-    showError("sp-otp-err",false);
+    showError("sp-otp-err", false);
   });
 
   // Step 3: pay
-  document.getElementById("sp-pay-btn")?.addEventListener("click", async ()=>{
-    const btn=document.getElementById("sp-pay-btn");
-    btn.disabled=true; btn.textContent="Processing…";
-    await new Promise(r=>setTimeout(r,1800));
+  document.getElementById("sp-pay-btn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("sp-pay-btn");
+    btn.disabled = true; btn.textContent = "Processing…";
+    await new Promise(r => setTimeout(r, 1800));
 
-    // Mark this passenger as paid and update booking
-    const updated={..._spState.booking};
-    updated.passengers=updated.passengers.map(p=>
-      p.payToken===token ? {...p,paymentStatus:"Paid"} : p
+    const updated = { ..._spState.booking };
+    updated.passengers = updated.passengers.map(p =>
+      p.payToken === token ? { ...p, paymentStatus: "Paid" } : p
     );
-    const allPaid =updated.passengers.every(p=>p.paymentStatus==="Paid");
-    const somePaid=updated.passengers.some(p=>p.paymentStatus==="Paid");
-    updated.status=allPaid?"Fully Paid":somePaid?"Partially Paid":"Pending";
+    const allPaid  = updated.passengers.every(p => p.paymentStatus === "Paid");
+    const somePaid = updated.passengers.some(p => p.paymentStatus === "Paid");
+    updated.status = allPaid ? "Fully Paid" : somePaid ? "Partially Paid" : "Pending";
     await updateBooking(updated);
 
-    container.querySelector(".split-link-card").innerHTML=`
-      <div class="payment-success-anim" style="text-align:center;padding:2rem">
-        <div class="circle">✅</div>
+    container.querySelector(".split-link-card").innerHTML = `
+      <div style="text-align:center;padding:2rem">
+        <div style="font-size:3rem;margin-bottom:1rem">✅</div>
         <h3>Payment Successful!</h3>
         <p>Your payment of <strong>${formatPrice(_spState.booking.perPaxAmount)}</strong> for booking
            <strong>#${bookingId}</strong> is confirmed.</p>
         <p style="margin-top:.75rem;color:var(--text-muted);font-size:.85rem">Have a great journey! ✈</p>
+        <a href="mybookings.html" class="btn btn-primary" style="margin-top:1.5rem">View My Bookings</a>
       </div>`;
   });
 }
-
 /* ═══════════════════════════════════════════════════════════════
    OTP HELPERS
 ═══════════════════════════════════════════════════════════════ */
