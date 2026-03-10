@@ -1,17 +1,4 @@
-/**
- * JetSetGo — Premium Flight Booking Application
- * script.js — Supabase + EmailJS powered
- */
-
-"use strict";
-
-/* ═══════════════════════════════════════════════════════════════
-   1. SUPABASE CONFIG
-   Setup: supabase.com → New Project → Settings → API
-   Paste "Project URL" and "anon public" key below
-═══════════════════════════════════════════════════════════════ */
-
-const SUPABASE_URL  = "";  
+const SUPABASE_URL  = "";    
 const SUPABASE_ANON = "";
 
 // Zero-dependency Supabase helper using plain fetch()
@@ -323,7 +310,8 @@ function initLoginPage() {
         clearTimeout(loginTimeout);
         _currentUserProfile = profile;
         showToast(`Welcome back, ${profile.name}! ✈`, "success");
-        const redir = sessionStorage.getItem("jsg_redirect") || "index.html";
+        const redir = localStorage.getItem("jsg_splitpay_redirect") || sessionStorage.getItem("jsg_redirect") || "index.html";
+        localStorage.removeItem("jsg_splitpay_redirect");
         sessionStorage.removeItem("jsg_redirect");
         setTimeout(() => { window.location.href = redir; }, 800);
       } catch (err) {
@@ -1947,18 +1935,17 @@ async function initSplitPayPage() {
   const p         = new URLSearchParams(window.location.search);
   const bookingId = p.get("booking");
   const token     = p.get("token");
-  const pName     = decodeURIComponent(p.get("name") || "");
 
   if (!bookingId || !token) {
-    container.innerHTML = `<div class="empty-state"><h3>Invalid Link</h3><p>This link is invalid or has expired.</p></div>`;
+    container.innerHTML = `<div class="empty-state"><h3>Invalid Link</h3><p>This payment link is invalid or has expired.</p></div>`;
     return;
   }
 
-  // ── Must be logged in ─────────────────────────────────────────
+  // ── Must be logged in ──────────────────────────────────────────
   const user = getLoggedInUser();
   if (!user) {
-    // Save the full URL so we can return here after login
-    sessionStorage.setItem("jsg_redirect", window.location.href);
+    // Store full URL in localStorage (survives mobile redirects better than sessionStorage)
+    localStorage.setItem("jsg_splitpay_redirect", window.location.href);
     container.innerHTML = `
       <div class="empty-state" style="padding:3rem 1.5rem;text-align:center">
         <div style="font-size:3rem;margin-bottom:1rem">✈</div>
@@ -1981,13 +1968,15 @@ async function initSplitPayPage() {
 
   const booking = await loadBookingById(bookingId);
   if (!booking) {
-    container.innerHTML = `<div class="empty-state"><h3>Booking Not Found</h3><p>We couldn't find booking <strong>#${bookingId}</strong>. It may not have synced yet — try checking My Bookings.</p><a href="mybookings.html" class="btn btn-primary" style="margin-top:1rem">My Bookings</a></div>`;
+    container.innerHTML = `<div class="empty-state"><h3>Booking Not Found</h3>
+      <p>We couldn't find booking <strong>#${bookingId}</strong>. It may still be syncing — try again in a moment.</p>
+      <a href="mybookings.html" class="btn btn-primary" style="margin-top:1rem">My Bookings</a></div>`;
     return;
   }
 
   const passenger = booking.passengers.find(p => p.payToken === token);
   if (!passenger) {
-    container.innerHTML = `<div class="empty-state"><h3>Invalid Payment Link</h3><p>This payment link is not valid for this booking.</p></div>`;
+    container.innerHTML = `<div class="empty-state"><h3>Invalid Payment Link</h3><p>This link is not valid for this booking.</p></div>`;
     return;
   }
 
@@ -1996,7 +1985,7 @@ async function initSplitPayPage() {
       <div style="text-align:center;padding:3rem">
         <div style="font-size:3rem;margin-bottom:1rem">✅</div>
         <h3>Already Paid!</h3>
-        <p>Your share of <strong>${formatPrice(booking.perPaxAmount)}</strong> for booking <strong>#${bookingId}</strong> is confirmed.</p>
+        <p>Your share for booking <strong>#${bookingId}</strong> is confirmed.</p>
         <a href="mybookings.html" class="btn btn-primary" style="margin-top:1.5rem">View My Bookings</a>
       </div>`;
     return;
@@ -2004,25 +1993,86 @@ async function initSplitPayPage() {
 
   _spState = { bookingId, token, generatedOtp: null, timerInterval: null, verifiedEmail: "", booking, passenger };
 
+  // ── Get meal options for this flight ──────────────────────────
+  const flight      = booking.flight;
+  const airlineName = flight?.airline || "IndiGo";
+  const travelClass = flight?.travelClass || "Economy";
+  const mealsOk     = flight?.mealsAvailable !== false;
+  const availMeals  = getMealsForFlight(airlineName, travelClass, mealsOk);
+  const mealOptions = availMeals.map(m =>
+    `<option value="${m.id}" data-price="${m.price}">${m.cat} — ${m.name}${m.price > 0 ? " (+₹" + m.price + ")" : m.price === 0 && m.id !== "MEAL-NONE" ? " (Complimentary)" : ""}</option>`
+  ).join("");
+  const basePax = booking.perPaxAmount;
+
   container.innerHTML = `
   <div class="split-link-card card">
-    <div style="font-size:2.5rem;margin-bottom:1rem">✈</div>
+    <div style="font-size:2.5rem;margin-bottom:.5rem">✈</div>
     <h2>Complete Your Payment</h2>
-    <p>Hi <strong>${user.name || passenger.name}</strong>! You've been added to a group booking.</p>
-    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:1rem;margin:1.5rem 0;text-align:left">
-      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.5rem;text-transform:uppercase;font-weight:600">Booking Details</div>
-      <div><strong>${booking.flight.from} → ${booking.flight.to}</strong></div>
-      <div style="font-size:.85rem;color:var(--text-muted)">${booking.flight.airline} · ${booking.flight.depTime}–${booking.flight.arrTime} · ${booking.flight.travelClass}</div>
-      <div style="margin-top:.75rem;font-family:'Syne';font-size:1.5rem;font-weight:800;color:var(--accent)">
-        Your share: ${formatPrice(booking.perPaxAmount)}</div>
+    <p>Hi <strong>${user.name || "Traveler"}</strong>! Fill in your details and pay your share.</p>
+
+    <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:1rem;margin:1rem 0;text-align:left">
+      <div style="font-size:.78rem;color:var(--text-muted);margin-bottom:.4rem;text-transform:uppercase;font-weight:600">Flight Details</div>
+      <div><strong>${flight.from} → ${flight.to}</strong></div>
+      <div style="font-size:.85rem;color:var(--text-muted)">${flight.airline} · ${flight.flightNumber} · ${flight.depTime}–${flight.arrTime} · ${flight.travelClass}</div>
+    </div>
+
+    <!-- Step 0: Passenger details + meal -->
+    <div id="sp-step0" style="text-align:left">
+      <h4 style="margin-bottom:1rem;font-size:.9rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">Your Details</h4>
+      <div class="form-group">
+        <label class="form-label">Full Name *</label>
+        <input type="text" class="form-control" id="sp-name" placeholder="As on passport" value="${user.name || ""}" />
+        <span class="form-error hidden" id="sp-name-err">⚠ Name required</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div class="form-group">
+          <label class="form-label">Age *</label>
+          <input type="number" class="form-control" id="sp-age" placeholder="28" min="1" max="120" />
+          <span class="form-error hidden" id="sp-age-err">⚠ Valid age required</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Gender *</label>
+          <select class="form-control" id="sp-gender">
+            <option value="">Select</option>
+            <option>Male</option><option>Female</option><option>Other</option>
+          </select>
+          <span class="form-error hidden" id="sp-gender-err">⚠ Select gender</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone *</label>
+        <input type="tel" class="form-control" id="sp-phone" placeholder="+91 9876543210" />
+        <span class="form-error hidden" id="sp-phone-err">⚠ Valid phone required</span>
+      </div>
+      ${mealsOk ? `
+      <div class="form-group">
+        <label class="form-label">🍽 Meal Preference</label>
+        <select class="form-control" id="sp-meal">${mealOptions}</select>
+      </div>` : `<p style="font-size:.8rem;color:var(--text-muted);margin:.5rem 0">⚠ No meals on this flight</p>`}
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:1.25rem 0 .5rem;padding:1rem;background:var(--surface2);border-radius:var(--radius-sm)">
+        <div>
+          <div style="font-size:.78rem;color:var(--text-muted)">Base fare</div>
+          <div style="font-family:'Syne';font-weight:700">${formatPrice(basePax)}</div>
+        </div>
+        <div id="sp-meal-cost-block" style="display:none">
+          <div style="font-size:.78rem;color:var(--text-muted)">Meal add-on</div>
+          <div style="font-family:'Syne';font-weight:700;color:var(--accent)" id="sp-meal-cost">+₹0</div>
+        </div>
+        <div>
+          <div style="font-size:.78rem;color:var(--text-muted)">Total due</div>
+          <div style="font-family:'Syne';font-size:1.4rem;font-weight:800;color:var(--accent)" id="sp-total-display">${formatPrice(basePax)}</div>
+        </div>
+      </div>
+      <button class="btn btn-primary w-full" id="sp-details-next">Continue to Verify →</button>
     </div>
 
     <!-- Step 1: Email OTP -->
-    <div id="sp-step1">
-      <p style="font-size:.88rem;color:var(--text-muted);margin-bottom:1rem">
-        We'll send a one-time password to verify your identity before payment.
+    <div id="sp-step1" class="hidden">
+      <p style="font-size:.88rem;color:var(--text-muted);margin-bottom:1rem;text-align:center">
+        We'll send a one-time password to verify your identity.
       </p>
-      <div class="form-group" style="text-align:left;margin-bottom:1rem">
+      <div class="form-group" style="margin-bottom:1rem">
         <label class="form-label">Your Email Address</label>
         <input type="email" class="form-control" id="sp-email"
           placeholder="you@example.com" value="${user.email || passenger.splitEmail || ""}" />
@@ -2057,14 +2107,49 @@ async function initSplitPayPage() {
         <div class="card-meta"><span>12/28</span><span>VISA</span></div>
       </div>
       <div style="text-align:center;margin:1rem 0">
-        <div style="font-size:.85rem;color:var(--text-muted)">Amount Due</div>
-        <div style="font-family:'Syne';font-size:2rem;font-weight:800;color:var(--accent)">${formatPrice(booking.perPaxAmount)}</div>
+        <div style="font-size:.85rem;color:var(--text-muted)">Total Amount Due</div>
+        <div style="font-family:'Syne';font-size:2rem;font-weight:800;color:var(--accent)" id="sp-final-amount">${formatPrice(basePax)}</div>
       </div>
       <button class="btn btn-primary btn-lg w-full" id="sp-pay-btn">💳 Pay Now</button>
     </div>
   </div>`;
 
-  // Step 1: send OTP
+  // ── Meal price update ──────────────────────────────────────────
+  let mealPrice = 0;
+  document.getElementById("sp-meal")?.addEventListener("change", function() {
+    const meal = availMeals.find(m => m.id === this.value);
+    mealPrice  = meal?.price || 0;
+    const total = basePax + mealPrice;
+    document.getElementById("sp-total-display").textContent = formatPrice(total);
+    document.getElementById("sp-final-amount") && (document.getElementById("sp-final-amount").textContent = formatPrice(total));
+    const mealBlock = document.getElementById("sp-meal-cost-block");
+    if (mealPrice > 0) {
+      mealBlock.style.display = "";
+      document.getElementById("sp-meal-cost").textContent = "+₹" + mealPrice;
+    } else {
+      mealBlock.style.display = "none";
+    }
+  });
+
+  // ── Step 0 → 1: validate details ──────────────────────────────
+  document.getElementById("sp-details-next")?.addEventListener("click", () => {
+    const name   = document.getElementById("sp-name")?.value.trim();
+    const age    = document.getElementById("sp-age")?.value;
+    const gender = document.getElementById("sp-gender")?.value;
+    const phone  = document.getElementById("sp-phone")?.value.trim();
+    let valid = true;
+    if (!name || name.length < 2)                    { showError("sp-name-err", true);   valid = false; } else showError("sp-name-err", false);
+    if (!age || age < 1 || age > 120)                { showError("sp-age-err", true);    valid = false; } else showError("sp-age-err", false);
+    if (!gender)                                     { showError("sp-gender-err", true); valid = false; } else showError("sp-gender-err", false);
+    if (!phone || phone.replace(/\D/g,"").length < 7){ showError("sp-phone-err", true);  valid = false; } else showError("sp-phone-err", false);
+    if (!valid) return;
+    // Save details to state
+    _spState.paxDetails = { name, age, gender, phone, meal: document.getElementById("sp-meal")?.value || "MEAL-NONE", mealPrice };
+    document.getElementById("sp-step0").classList.add("hidden");
+    document.getElementById("sp-step1").classList.remove("hidden");
+  });
+
+  // ── Step 1: send OTP ──────────────────────────────────────────
   document.getElementById("sp-send-btn")?.addEventListener("click", async () => {
     const email = document.getElementById("sp-email")?.value.trim();
     if (!email || !isValidEmail(email)) { showError("sp-email-err", true); return; }
@@ -2073,7 +2158,7 @@ async function initSplitPayPage() {
     _spState.verifiedEmail = email;
     const btn = document.getElementById("sp-send-btn");
     btn.disabled = true; btn.textContent = "Sending…";
-    await sendOtpEmail(email, user.name || passenger.name, _spState.generatedOtp);
+    await sendOtpEmail(email, _spState.paxDetails?.name || user.name || "Traveler", _spState.generatedOtp);
     btn.disabled = false; btn.innerHTML = "📧 Send OTP";
     document.getElementById("sp-step1").classList.add("hidden");
     document.getElementById("sp-step2").classList.remove("hidden");
@@ -2083,13 +2168,16 @@ async function initSplitPayPage() {
     startOtpTimer("sp-timer", _spState);
   });
 
-  // Step 2: verify OTP
+  // ── Step 2: verify OTP ────────────────────────────────────────
   document.getElementById("sp-verify-btn")?.addEventListener("click", () => {
     const entered = getOtpValue("sp-otp-digit");
     if (entered.length < 6) { showError("sp-otp-err", true, "⚠ Enter all 6 digits."); return; }
     if (entered !== _spState.generatedOtp) { showError("sp-otp-err", true, "⚠ Incorrect OTP."); clearOtpDigits("sp-otp-digit"); return; }
     showError("sp-otp-err", false);
     clearInterval(_spState.timerInterval);
+    const total = basePax + (_spState.paxDetails?.mealPrice || 0);
+    const finalAmountEl = document.getElementById("sp-final-amount");
+    if (finalAmountEl) finalAmountEl.textContent = formatPrice(total);
     document.getElementById("sp-step2").classList.add("hidden");
     document.getElementById("sp-step3").classList.remove("hidden");
     showToast("✅ OTP Verified!", "success");
@@ -2097,23 +2185,39 @@ async function initSplitPayPage() {
 
   document.getElementById("sp-resend-btn")?.addEventListener("click", async () => {
     _spState.generatedOtp = String(Math.floor(100000 + Math.random() * 900000));
-    await sendOtpEmail(_spState.verifiedEmail, user.name || passenger.name, _spState.generatedOtp);
+    await sendOtpEmail(_spState.verifiedEmail, _spState.paxDetails?.name || user.name, _spState.generatedOtp);
     clearInterval(_spState.timerInterval);
     startOtpTimer("sp-timer", _spState);
     clearOtpDigits("sp-otp-digit");
     showError("sp-otp-err", false);
   });
 
-  // Step 3: pay
+  // ── Step 3: pay ───────────────────────────────────────────────
   document.getElementById("sp-pay-btn")?.addEventListener("click", async () => {
     const btn = document.getElementById("sp-pay-btn");
     btn.disabled = true; btn.textContent = "Processing…";
     await new Promise(r => setTimeout(r, 1800));
 
+    const details   = _spState.paxDetails || {};
+    const mealId    = details.meal || "MEAL-NONE";
+    const mealData  = MEALS_DB.find(m => m.id === mealId);
+    const totalPaid = basePax + (details.mealPrice || 0);
+
     const updated = { ..._spState.booking };
-    updated.passengers = updated.passengers.map(p =>
-      p.payToken === token ? { ...p, paymentStatus: "Paid" } : p
-    );
+    updated.passengers = updated.passengers.map(p => {
+      if (p.payToken !== token) return p;
+      return {
+        ...p,
+        name:          details.name || p.name,
+        age:           details.age  || p.age,
+        gender:        details.gender || p.gender,
+        phone:         details.phone || p.phone,
+        meal:          mealData?.name || "No Meal",
+        mealPrice:     details.mealPrice || 0,
+        paymentStatus: "Paid",
+        amountPaid:    totalPaid,
+      };
+    });
     const allPaid  = updated.passengers.every(p => p.paymentStatus === "Paid");
     const somePaid = updated.passengers.some(p => p.paymentStatus === "Paid");
     updated.status = allPaid ? "Fully Paid" : somePaid ? "Partially Paid" : "Pending";
@@ -2123,8 +2227,9 @@ async function initSplitPayPage() {
       <div style="text-align:center;padding:2rem">
         <div style="font-size:3rem;margin-bottom:1rem">✅</div>
         <h3>Payment Successful!</h3>
-        <p>Your payment of <strong>${formatPrice(_spState.booking.perPaxAmount)}</strong> for booking
+        <p>Your payment of <strong>${formatPrice(totalPaid)}</strong> for booking
            <strong>#${bookingId}</strong> is confirmed.</p>
+        ${mealData && mealData.id !== "MEAL-NONE" ? `<p style="font-size:.85rem;color:var(--text-muted);margin-top:.5rem">Meal: ${mealData.name}</p>` : ""}
         <p style="margin-top:.75rem;color:var(--text-muted);font-size:.85rem">Have a great journey! ✈</p>
         <a href="mybookings.html" class="btn btn-primary" style="margin-top:1.5rem">View My Bookings</a>
       </div>`;
