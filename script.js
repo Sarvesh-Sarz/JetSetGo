@@ -1,3 +1,16 @@
+/**
+ * JetSetGo — Premium Flight Booking Application
+ * script.js — Supabase + EmailJS powered
+ */
+
+"use strict";
+
+/* ═══════════════════════════════════════════════════════════════
+   1. SUPABASE CONFIG
+   Setup: supabase.com → New Project → Settings → API
+   Paste "Project URL" and "anon public" key below
+═══════════════════════════════════════════════════════════════ */
+
 const SUPABASE_URL  = "";    
 const SUPABASE_ANON = "";
 
@@ -86,7 +99,7 @@ function loadFirebase() { return Promise.resolve(isSupabaseConfigured()); }
 const EMAILJS_PUBLIC_KEY   = "";
 const EMAILJS_SERVICE_ID   = "";
 const EMAILJS_OTP_TEMPLATE     = "";
-const EMAILJS_PAYMENT_TEMPLATE = ""; 
+const EMAILJS_PAYMENT_TEMPLATE = ""; // ← paste your Order Confirmation template ID here
 
 let _emailJsReady = false;
 
@@ -1819,54 +1832,124 @@ function renderBookings() {
     return `<span class="badge badge-muted">${b.status}</span>`;
   };
 
+  const infoRow = (label, value) => value ? `
+    <div class="bk-info-row">
+      <span class="bk-info-label">${label}</span>
+      <span class="bk-info-value">${value}</span>
+    </div>` : "";
+
   list.innerHTML = bookings.map(b => {
-    // Passenger rows
-    const paxRows = b.passengers.map(p => {
-      if (b.splitFare) {
-        const paid = p.paymentStatus === "Paid";
-        return `<div class="passenger-status-row">
-          <div>
-            <div class="p-name">👤 ${p.name}</div>
-            <div style="font-size:.8rem;color:var(--text-muted)">${p.splitEmail||p.email}</div>
+    const f = b.flight || {};
+    const isCancelled = b.status === "Cancelled";
+
+    // ── Flight details block ──────────────────────────────────
+    const flightBlock = `
+      <div class="bk-section">
+        <div class="bk-section-title">✈ Outbound Flight</div>
+        <div class="bk-flight-route">
+          <div class="bk-time-block">
+            <div class="bk-time">${f.depTime || "—"}</div>
+            <div class="bk-city">${f.from || ""}</div>
           </div>
-          ${paid
-            ? `<span class="badge badge-success">✅ Paid</span>`
-            : `<div style="display:flex;gap:.5rem;align-items:center">
-                <span class="badge badge-danger">💳 Pending</span>
-                <button class="btn btn-primary btn-sm"
-                  onclick="resendPaymentLink('${b.id}','${p.payToken}','${p.name}','${p.splitEmail||p.email}',${b.perPaxAmount})">
-                  Resend
-                </button>
-              </div>`}
-        </div>`;
-      }
-      return `<div class="passenger-status-row">
-        <div>
-          <div class="p-name">👤 ${p.name}</div>
-          <div style="font-size:.8rem;color:var(--text-muted)">${p.gender||""} · Age ${p.age||""}${p.meal ? " · "+p.meal : ""}</div>
+          <div class="bk-duration-block">
+            <div class="bk-duration-line"></div>
+            <div class="bk-duration-label">${f.duration || ""}</div>
+          </div>
+          <div class="bk-time-block" style="text-align:right">
+            <div class="bk-time">${f.arrTime || "—"}</div>
+            <div class="bk-city">${f.to || ""}</div>
+          </div>
         </div>
-        <span class="badge badge-success">✅ Paid</span>
+        ${infoRow("Flight", `${f.airline || ""} ${f.flightNumber || ""}`)}
+        ${infoRow("Date", b.travelDate || f.depDate || "")}
+        ${infoRow("Class", f.travelClass || "")}
+        ${infoRow("Aircraft", f.aircraft || "")}
+        ${infoRow("Terminal", f.terminal || "")}
+      </div>`;
+
+    // ── Return flight block ────────────────────────────────────
+    const rf = b.returnFlight || (b.isRoundTrip ? f.returnFlight : null);
+    const returnBlock = rf ? `
+      <div class="bk-section">
+        <div class="bk-section-title">↩ Return Flight</div>
+        <div class="bk-flight-route">
+          <div class="bk-time-block">
+            <div class="bk-time">${rf.depTime || "—"}</div>
+            <div class="bk-city">${rf.from || f.to || ""}</div>
+          </div>
+          <div class="bk-duration-block">
+            <div class="bk-duration-line"></div>
+            <div class="bk-duration-label">${rf.duration || ""}</div>
+          </div>
+          <div class="bk-time-block" style="text-align:right">
+            <div class="bk-time">${rf.arrTime || "—"}</div>
+            <div class="bk-city">${rf.to || f.from || ""}</div>
+          </div>
+        </div>
+        ${infoRow("Flight", `${rf.airline || ""} ${rf.flightNumber || ""}`)}
+        ${infoRow("Class", rf.travelClass || f.travelClass || "")}
+      </div>` : "";
+
+    // ── Passenger rows ─────────────────────────────────────────
+    const paxRows = b.passengers.map((p, idx) => {
+      const paid    = p.paymentStatus === "Paid";
+      const mealStr = p.meal && p.meal !== "No Meal" ? `🍽 ${p.meal}${p.mealPrice > 0 ? " (+₹" + p.mealPrice + ")" : " (Complimentary)"}` : "🚫 No Meal";
+      const amtStr  = p.amountPaid ? formatPrice(p.amountPaid) : (b.splitFare ? formatPrice(b.perPaxAmount) : "");
+
+      return `<div class="bk-pax-card">
+        <div class="bk-pax-header">
+          <div>
+            <span class="bk-pax-num">${idx + 1}</span>
+            <span class="bk-pax-name">${p.name || "Pending details"}</span>
+            ${p.isPrimary ? `<span style="font-size:.7rem;color:var(--accent);margin-left:.4rem">(Primary)</span>` : ""}
+          </div>
+          ${b.splitFare
+            ? (paid
+                ? `<span class="badge badge-success">✅ Paid ${amtStr}</span>`
+                : `<div style="display:flex;gap:.5rem;align-items:center">
+                    <span class="badge badge-danger">💳 Pending</span>
+                    <button class="btn btn-primary btn-sm"
+                      onclick="resendPaymentLink('${b.id}','${p.payToken}','${p.name}','${p.splitEmail||p.email}',${b.perPaxAmount})">
+                      Resend Link
+                    </button>
+                  </div>`)
+            : `<span class="badge badge-success">✅ Paid</span>`}
+        </div>
+        ${p.name ? `<div class="bk-pax-details">
+          ${p.age    ? `<span>🎂 Age ${p.age}</span>` : ""}
+          ${p.gender ? `<span>👤 ${p.gender}</span>` : ""}
+          ${p.phone  ? `<span>📞 ${p.phone}</span>` : ""}
+          ${(p.email || p.splitEmail) ? `<span>✉ ${p.email || p.splitEmail}</span>` : ""}
+          <span>${mealStr}</span>
+        </div>` : `<div style="font-size:.8rem;color:var(--text-muted);padding:.4rem 0">Details will appear once passenger pays</div>`}
       </div>`;
     }).join("");
 
-    // Return flight info
-    const returnInfo = b.isRoundTrip && b.returnFlight ? `
-      <div style="margin:.5rem 0;padding:.6rem .75rem;background:var(--surface2);border-radius:8px;font-size:.83rem">
-        <span style="color:var(--accent);font-weight:700">↩ Return:</span>
-        ${b.returnFlight.airline} · ${b.returnFlight.flightNumber} · ${b.returnFlight.depTime}–${b.returnFlight.arrTime}
-      </div>` : "";
+    // ── Fare breakdown ─────────────────────────────────────────
+    const mealTotal  = (b.passengers || []).reduce((s, p) => s + (p.mealPrice || 0), 0);
+    const fareBlock  = `
+      <div class="bk-section">
+        <div class="bk-section-title">💳 Fare Breakdown</div>
+        ${infoRow("Base fare", formatPrice(b.totalAmount - Math.round(b.totalAmount * 0.18 / 1.18) - 200 - mealTotal))}
+        ${mealTotal > 0 ? infoRow("Meals", `+${formatPrice(mealTotal)}`) : ""}
+        ${infoRow("Taxes & fees", `+${formatPrice(Math.round(b.totalAmount * 0.18 / 1.18))}`)}
+        ${infoRow("Convenience fee", "+₹200")}
+        <div class="bk-info-row" style="border-top:1px solid var(--border);margin-top:.5rem;padding-top:.5rem">
+          <span class="bk-info-label" style="font-weight:700">Total</span>
+          <span class="bk-info-value" style="font-family:'Syne';font-weight:800;color:var(--accent)">${formatPrice(b.totalAmount)}</span>
+        </div>
+        ${b.splitFare ? `<div class="bk-info-row"><span class="bk-info-label">Per person</span><span class="bk-info-value">${formatPrice(b.perPaxAmount)}</span></div>` : ""}
+      </div>`;
 
-    // Cancellation info
-    const isCancelled = b.status === "Cancelled";
+    // ── Cancellation info ──────────────────────────────────────
     const cancelInfo = isCancelled ? `
-      <div style="margin-top:.75rem;padding:.75rem;background:rgba(239,68,68,.08);border-radius:8px;font-size:.83rem;color:#ef4444">
-        ❌ Cancelled on ${b.cancelledAt ? new Date(b.cancelledAt).toLocaleDateString("en-IN") : "—"}<br/>
-        Cancellation fee: ₹${(b.cancellationFee||0).toLocaleString("en-IN")} &nbsp;|&nbsp;
+      <div style="padding:.75rem;background:rgba(239,68,68,.08);border-radius:8px;font-size:.83rem;color:#ef4444">
+        ❌ Cancelled on ${b.cancelledAt ? new Date(b.cancelledAt).toLocaleDateString("en-IN") : "—"} &nbsp;·&nbsp;
+        Fee: ₹${(b.cancellationFee||0).toLocaleString("en-IN")} &nbsp;·&nbsp;
         Refund: ₹${(b.refundAmount||0).toLocaleString("en-IN")}
       </div>` : "";
 
-    // Cancel button with charge preview
-    const charge = !isCancelled ? getCancellationCharge(b) : null;
+    const charge    = !isCancelled ? getCancellationCharge(b) : null;
     const cancelBtn = !isCancelled ? `
       <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
         <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:.5rem">
@@ -1883,12 +1966,12 @@ function renderBookings() {
         <div>
           <div class="booking-id">#${b.id}</div>
           <div class="booking-route">
-            <span>${b.flight?.from||""}</span>
+            <span>${f.from||""}</span>
             <span class="arrow">${b.isRoundTrip ? "⇌" : "✈"}</span>
-            <span>${b.flight?.to||""}</span>
+            <span>${f.to||""}</span>
           </div>
           <div style="font-size:.82rem;color:var(--text-muted);margin-top:.2rem">
-            ${b.flight?.airline||""} · ${b.flight?.flightNumber||""} · ${b.flight?.depTime||""}–${b.flight?.arrTime||""} · ${b.flight?.travelClass||""}
+            ${f.airline||""} · ${f.flightNumber||""} · ${f.depTime||""}–${f.arrTime||""} · ${f.travelClass||""}
           </div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:.4rem">
@@ -1898,12 +1981,13 @@ function renderBookings() {
         </div>
       </div>
       <div class="booking-item-body" id="details-${b.id}">
-        ${returnInfo}
-        <h4 style="margin-bottom:.75rem;font-size:.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">
-          Passengers (${b.passengers.length})
-        </h4>
-        <div class="passenger-status-list">${paxRows}</div>
-        ${b.splitFare ? `<p style="font-size:.78rem;color:var(--text-muted);margin-top:.5rem">Per person: ${formatPrice(b.perPaxAmount)}</p>` : ""}
+        ${flightBlock}
+        ${returnBlock}
+        <div class="bk-section">
+          <div class="bk-section-title">👥 Passengers (${b.passengers.length})</div>
+          <div class="bk-pax-list">${paxRows}</div>
+        </div>
+        ${fareBlock}
         ${cancelInfo}
         ${cancelBtn}
       </div>
