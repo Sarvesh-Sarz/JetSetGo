@@ -1,7 +1,3 @@
-/* ============================================================
-   JetSetGo - Premium Flight Booking | style.css
-   ============================================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 /* ─── CSS Variables ─────────────────────────────────────────── */
@@ -1251,3 +1247,146 @@ select option { background:var(--surface); color:var(--text); }
   border-color: rgba(239,68,68,.3) !important;
 }
 .booking-cancelled .booking-route { text-decoration: line-through; }
+
+/* ─── Extra mobile fixes ─────────────────────────────────────── */
+@media (max-width:640px) {
+  /* Filter chips wrap properly */
+  .filter-bar { flex-wrap:wrap; gap:.5rem; }
+  .filter-chip { font-size:.75rem; padding:.35rem .75rem; }
+
+  /* Booking summary readable on small screens */
+  .booking-summary { font-size:.85rem; }
+  .fare-summary-table td { font-size:.82rem; }
+
+  /* Split link card full width on mobile */
+  .split-link-card { padding:1.5rem 1.25rem; border-radius:16px; }
+
+  /* My bookings page */
+  .booking-item-header { flex-direction:column; align-items:flex-start; gap:.5rem; }
+  .booking-item-header > div:last-child { align-items:flex-start !important; flex-direction:row; flex-wrap:wrap; gap:.5rem; }
+
+  /* Hero search card */
+  .trip-tabs { margin-bottom:1rem; }
+  .search-card { margin:0 .5rem; }
+
+  /* Passenger form on mobile */
+  .passenger-form-card { padding:1rem; }
+  .p-body { gap:.75rem !important; }
+
+  /* Payment modal full height on mobile */
+  .modal-overlay { padding:0; }
+  .modal { max-height:92vh; overflow-y:auto; }
+}
+
+/* ─── Expanded booking card detail styles ────────────────────── */
+.bk-section {
+  padding: .9rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.bk-section:last-of-type { border-bottom: none; }
+
+.bk-section-title {
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+  margin-bottom: .75rem;
+}
+
+/* Flight route visual */
+.bk-flight-route {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .75rem;
+}
+.bk-time-block { flex: 0 0 auto; }
+.bk-time {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.bk-city {
+  font-size: .78rem;
+  color: var(--text-muted);
+  margin-top: .15rem;
+}
+.bk-duration-block {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .3rem;
+}
+.bk-duration-line {
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+  position: relative;
+}
+.bk-duration-line::before,
+.bk-duration-line::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.bk-duration-line::before { left: 0; }
+.bk-duration-line::after  { right: 0; }
+.bk-duration-label {
+  font-size: .75rem;
+  color: var(--text-muted);
+}
+
+/* Info rows */
+.bk-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .3rem 0;
+  font-size: .84rem;
+}
+.bk-info-label { color: var(--text-muted); }
+.bk-info-value { font-weight: 600; text-align: right; }
+
+/* Passenger cards */
+.bk-pax-list { display: flex; flex-direction: column; gap: .6rem; }
+.bk-pax-card {
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: .75rem;
+}
+.bk-pax-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .4rem;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+.bk-pax-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 700;
+  margin-right: .4rem;
+}
+.bk-pax-name { font-weight: 600; font-size: .9rem; }
+.bk-pax-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .75rem;
+  font-size: .78rem;
+  color: var(--text-muted);
+  margin-top: .25rem;
+}
