@@ -10,11 +10,11 @@
 
 
 
-### ✈ &nbsp; *Book smarter. Fly together. Split the fare.*  &nbsp; ✈
+###  &nbsp; *Book smarter. Fly together. Split the fare.*  &nbsp; 
 
 
 
-# ✈ JetSetGo — Flight Booking Web App
+#  JetSetGo — Flight Booking Web App
 
 A fully functional, full-stack, user-friendly multi-page flight booking web application built with vanilla HTML, CSS, and JavaScript. Features real authentication via Supabase, OTP verification via EmailJS, split fare payments, and a standalone passenger payment portal.
 
