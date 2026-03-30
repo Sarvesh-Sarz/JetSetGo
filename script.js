@@ -11,7 +11,7 @@
    Paste "Project URL" and "anon public" key below
 ═══════════════════════════════════════════════════════════════ */
 
-const SUPABASE_URL  = "";    
+const SUPABASE_URL  = "";    // https://xxxx.supabase.co
 const SUPABASE_ANON = "";
 
 // Zero-dependency Supabase helper using plain fetch()
@@ -99,7 +99,7 @@ function loadFirebase() { return Promise.resolve(isSupabaseConfigured()); }
 const EMAILJS_PUBLIC_KEY   = "";
 const EMAILJS_SERVICE_ID   = "";
 const EMAILJS_OTP_TEMPLATE     = "";
-const EMAILJS_PAYMENT_TEMPLATE = ""; // ← paste your Order Confirmation template ID here
+const EMAILJS_PAYMENT_TEMPLATE = "";  // ← paste your Order Confirmation template ID here
 
 let _emailJsReady = false;
 
@@ -474,8 +474,10 @@ function initHomePage() {
     tab.addEventListener("click", () => {
       document.querySelectorAll(".trip-tab").forEach(t => t.classList.remove("active"));
       tab.classList.add("active");
-      const rg = document.getElementById("return-date-group");
-      if (rg) rg.style.display = tab.dataset.trip === "roundtrip" ? "" : "none";
+      const rg    = document.getElementById("return-date-group");
+      const isRT  = tab.dataset.trip === "roundtrip";
+      // Show/hide return date — flex automatically rebalances all items
+      if (rg) rg.style.display = isRT ? "" : "none";
     });
   });
 
@@ -499,6 +501,7 @@ function initHomePage() {
       showToast("Return date must be after departure date.", "warning"); return;
     }
     const params = { from, to, depart, passengers, class: cls, trip: activeTab };
+    sessionStorage.setItem("jsg_last_search", new URLSearchParams(params).toString());
     if (activeTab === "roundtrip") params.returnDate = returnDate;
     window.location.href = `flights.html?${new URLSearchParams(params)}`;
   });
@@ -1503,13 +1506,16 @@ async function completeBooking(flight) {
   const tax        = Math.round((baseTotal + mealCost) * .18);
   const total      = baseTotal + mealCost + tax + 200;
   const bookingId  = "JSG"+Date.now().toString().slice(-8).toUpperCase();
+  const _searchParams = new URLSearchParams(sessionStorage.getItem("jsg_last_search") || "");
+  const _departDate   = _searchParams.get("depart") || "";
   const booking    = {
     id:bookingId, userId:user?.uid||user?.id||"guest",
     userName:user?.name||"Guest", userEmail:user?.email||"",
     flight, returnFlight: rf || null,
     isRoundTrip: flight.isRoundTrip || false,
     passengers, status:"Fully Paid", splitFare:false,
-    totalAmount:total, createdAt:new Date().toISOString(),
+    totalAmount:total, travelDate: _departDate,
+    createdAt:new Date().toISOString(),
   };
   await saveBooking(booking);
 
@@ -1573,6 +1579,8 @@ async function showSplitFareFlow(flight) {
     }))
   ];
 
+  const _spSearchParams = new URLSearchParams(sessionStorage.getItem("jsg_last_search") || "");
+  const _spDepartDate   = _spSearchParams.get("depart") || "";
   const booking = {
     id: bookingId,
     userId:    user?.uid || user?.id || "guest",
@@ -1584,6 +1592,7 @@ async function showSplitFareFlow(flight) {
     splitFare:    true,
     totalAmount:  total,
     perPaxAmount: perPax,
+    travelDate:   _spDepartDate,
     createdAt:    new Date().toISOString(),
   };
 
@@ -1842,6 +1851,33 @@ function renderBookings() {
     const f = b.flight || {};
     const isCancelled = b.status === "Cancelled";
 
+    // Check if flight date has passed
+    let isPastFlight = false;
+    const _td = b.travelDate || b.flight?.depDate || "";
+    if (_td) {
+      // Parse date — handle both YYYY-MM-DD and M/D/YYYY (or D/M/YYYY stored by Indian locale)
+      let _parsed;
+      if (/^\d{4}-\d{2}-\d{2}/.test(_td)) {
+        // ISO format YYYY-MM-DD — safe to parse directly
+        _parsed = new Date(_td);
+      } else if (/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.test(_td)) {
+        // M/D/YYYY or D/M/YYYY — treat as DD/MM/YYYY (Indian format)
+        const [dd, mm, yyyy] = _td.split("/");
+        const fullYear = yyyy.length === 2 ? "20" + yyyy : yyyy;
+        _parsed = new Date(`${fullYear}-${mm.padStart(2,"0")}-${dd.padStart(2,"0")}`);
+      } else {
+        _parsed = new Date(_td);
+      }
+      isPastFlight = !isNaN(_parsed) && _parsed < new Date(new Date().toDateString());
+    } else if (b.createdAt) {
+      // No travelDate stored — use createdAt as a proxy for the flight date
+      // (bookings are typically made close to the travel date)
+      // If the booking creation date itself is in the past, treat flight as past
+      const _createdDate = new Date(new Date(b.createdAt).toDateString());
+      const _today = new Date(new Date().toDateString());
+      isPastFlight = _createdDate < _today;
+    }
+
     // ── Flight details block ──────────────────────────────────
     const flightBlock = `
       <div class="bk-section">
@@ -1934,9 +1970,9 @@ function renderBookings() {
         ${mealTotal > 0 ? infoRow("Meals", `+${formatPrice(mealTotal)}`) : ""}
         ${infoRow("Taxes & fees", `+${formatPrice(Math.round(b.totalAmount * 0.18 / 1.18))}`)}
         ${infoRow("Convenience fee", "+₹200")}
-        <div class="bk-info-row" style="border-top:1px solid var(--border);margin-top:.5rem;padding-top:.5rem">
-          <span class="bk-info-label" style="font-weight:700">Total</span>
-          <span class="bk-info-value" style="font-family:'Syne';font-weight:800;color:var(--accent)">${formatPrice(b.totalAmount)}</span>
+        <div class="bk-info-row" style="border-top:2px solid var(--accent);margin-top:.75rem;padding-top:.75rem">
+          <span class="bk-info-label" style="font-weight:700;font-size:.95rem">Total Paid</span>
+          <span class="bk-info-value" style="font-family:'Syne';font-weight:800;font-size:1.15rem;color:var(--accent)">${formatPrice(b.totalAmount)}</span>
         </div>
         ${b.splitFare ? `<div class="bk-info-row"><span class="bk-info-label">Per person</span><span class="bk-info-value">${formatPrice(b.perPaxAmount)}</span></div>` : ""}
       </div>`;
@@ -1949,11 +1985,12 @@ function renderBookings() {
         Refund: ₹${(b.refundAmount||0).toLocaleString("en-IN")}
       </div>` : "";
 
-    const charge    = !isCancelled ? getCancellationCharge(b) : null;
-    const cancelBtn = !isCancelled ? `
-      <div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)">
-        <p style="font-size:.78rem;color:var(--text-muted);margin-bottom:.5rem">
-          ⚠ Cancellation charge: ${charge.pct}% (${charge.label})
+    const charge    = (!isCancelled && !isPastFlight) ? getCancellationCharge(b) : null;
+    const cancelBtn = (!isCancelled && !isPastFlight) ? `
+      <div class="bk-section" style="border-bottom:none;padding-bottom:0">
+        <div class="bk-section-title">⚠ Cancellation</div>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:.75rem">
+          Cancellation charge: <strong>${charge.pct}%</strong> (${charge.label})
         </p>
         <button class="btn btn-danger w-full"
           onclick="event.stopPropagation();cancelBooking('${b.id}')">
@@ -1988,8 +2025,9 @@ function renderBookings() {
           <div class="bk-pax-list">${paxRows}</div>
         </div>
         ${fareBlock}
-        ${cancelInfo}
-        ${cancelBtn}
+        ${isCancelled ? cancelInfo : ""}
+        ${isCancelled || isPastFlight ? "" : cancelBtn}
+        ${isPastFlight && !isCancelled ? `<div style="padding:.6rem .75rem;background:var(--surface2);border-radius:8px;font-size:.8rem;color:var(--text-muted);text-align:center">✈ This flight has already departed</div>` : ""}
       </div>
     </div>`;
   }).join("");
