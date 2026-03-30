@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" /></head>
 <body>
 
-<!-- ─── Navigation ─────── -->
+<!-- ─── Navigation ───────────────────────────────────────────── -->
 <nav id="main-nav">
   <a href="index.html" class="nav-logo">✈ JetSetGo</a>
   <div class="nav-links">
@@ -22,7 +22,7 @@
   </div>
 </nav>
 
-<!-- ─── Hero ─────────── -->
+<!-- ─── Hero ─────────────────────────────────────────────────── -->
 <section class="hero-section">
   <div class="hero-bg"></div>
   <div class="hero-orb hero-orb-1"></div>
@@ -41,14 +41,16 @@
       <button class="trip-tab active" data-trip="oneway">→ One Way</button>
     </div>
 
-    <!-- Row 1: From, To, Departure, Return, Passengers -->
-    <div class="search-row1">
-      <div class="form-group">
-        <label class="form-label">From</label>
-        <div class="input-icon-wrap">
-          <span class="input-icon">🛫</span>
-          <select class="form-control" id="search-from">
-            <option value="">Select Departure City</option>
+    <!-- Search Form -->
+    <div class="search-form">
+      <!-- From / To -->
+      <div class="sf-row sf-cities">
+        <div class="form-group">
+          <label class="form-label">From</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">🛫</span>
+            <select class="form-control" id="search-from">
+            <option value="">Select City</option>
             <option value="DEL">Delhi (DEL)</option>
             <option value="BOM">Mumbai (BOM)</option>
             <option value="BLR">Bengaluru (BLR)</option>
@@ -85,15 +87,16 @@
             <option value="KUU">Kullu (KUU)</option>
             <option value="PNY">Puducherry (PNY)</option>
             <option value="HGI">Pasighat (HGI)</option>
-          </select>
+            </select>
+          </div>
         </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">To</label>
-        <div class="input-icon-wrap">
-          <span class="input-icon">🛬</span>
-          <select class="form-control" id="search-to">
-            <option value="">Select Destination City</option>
+        <div class="sf-divider">✈</div>
+        <div class="form-group">
+          <label class="form-label">To</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">🛬</span>
+            <select class="form-control" id="search-to">
+            <option value="">Select City</option>
             <option value="DEL">Delhi (DEL)</option>
             <option value="BOM">Mumbai (BOM)</option>
             <option value="BLR">Bengaluru (BLR)</option>
@@ -130,53 +133,54 @@
             <option value="KUU">Kullu (KUU)</option>
             <option value="PNY">Puducherry (PNY)</option>
             <option value="HGI">Pasighat (HGI)</option>
-          </select>
+            </select>
+          </div>
         </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Departure Date</label>
-        <div class="input-icon-wrap">
-          <span class="input-icon">📅</span>
-          <input type="date" class="form-control" id="search-depart" />
+      <!-- Departure · Return · Passengers · Class -->
+      <div class="sf-row sf-details" id="search-row-details">
+        <div class="form-group">
+          <label class="form-label">Departure</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">📅</span>
+            <input type="date" class="form-control" id="search-depart" />
+          </div>
         </div>
-      </div>
-      <div class="form-group" id="return-date-group" style="display:none">
-        <label class="form-label">Return Date</label>
-        <div class="input-icon-wrap">
-          <span class="input-icon">📅</span>
-          <input type="date" class="form-control" id="search-return" />
+        <div class="form-group" id="return-date-group" style="display:none">
+          <label class="form-label">Return</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">📅</span>
+            <input type="date" class="form-control" id="search-return" />
+          </div>
         </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Passengers</label>
-        <div class="input-icon-wrap">
-          <span class="input-icon">👥</span>
-          <select class="form-control" id="search-passengers">
-            <option value="1">1 Passenger</option>
-            <option value="2">2 Passengers</option>
-            <option value="3">3 Passengers</option>
-            <option value="4">4 Passengers</option>
-            <option value="5">5 Passengers</option>
-            <option value="6">6 Passengers</option>
-          </select>
+        <div class="form-group">
+          <label class="form-label">Passengers</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">👥</span>
+            <select class="form-control" id="search-passengers">
+              <option value="1">1 Passenger</option>
+              <option value="2">2 Passengers</option>
+              <option value="3">3 Passengers</option>
+              <option value="4">4 Passengers</option>
+              <option value="5">5 Passengers</option>
+              <option value="6">6 Passengers</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Class</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">💺</span>
+            <select class="form-control" id="search-class">
+              <option value="Economy">Economy</option>
+              <option value="Business">Business</option>
+              <option value="First Class">First Class</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Row 2: Class only (left-aligned, 20% width) -->
-    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:1rem; margin-bottom:1.5rem;">
-      <div class="form-group">
-        <label class="form-label">Class</label>
-        <div class="input-icon-wrap">
-          <span class="input-icon">💺</span>
-          <select class="form-control" id="search-class">
-            <option value="Economy">Economy</option>
-            <option value="Business">Business</option>
-            <option value="First Class">First Class</option>
-          </select>
-        </div>
-      </div>
-    </div>
 
     <button class="search-btn" id="search-btn">
       <span>🔍</span> Search Flights
@@ -184,7 +188,7 @@
   </div>
 </section>
 
-<!-- ─── Features ─────── -->
+<!-- ─── Features ─────────────────────────────────────────────── -->
 <div class="features-section">
   <div class="feature-card fade-in">
     <div class="feature-icon">🔒</div>
@@ -208,7 +212,7 @@
   </div>
 </div>
 
-<!-- ─── Toast Container ────── -->
+<!-- ─── Toast Container ───────────────────────────────────────── -->
 <div id="toast-container"></div>
 
 
