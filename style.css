@@ -1,3 +1,7 @@
+/* ============================================================
+   JetSetGo - Premium Flight Booking | style.css
+   ============================================================ */
+
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
 
 /* ─── CSS Variables ─────────────────────────────────────────── */
@@ -445,7 +449,60 @@ nav {
   display:grid;
   grid-template-columns:1fr 1fr 1fr 1fr 1fr;
   gap:1rem; margin-bottom:1.5rem;
-  /* only first item used in row2; others hidden by default */
+}
+/* ── Search form ─────────────────────────────────────────────── */
+.search-form { width: 100%; }
+
+/* Row 1: From ✈ To */
+.sf-cities {
+  display: flex;
+  align-items: flex-end;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  width: 100%;
+}
+.sf-cities .form-group {
+  flex: 1;
+  min-width: 0;
+}
+.sf-cities .form-control {
+  width: 100%;
+  height: 54px;
+  font-size: 1rem;
+  font-weight: 600;
+  padding-top: .9rem;
+  padding-bottom: .9rem;
+}
+.sf-divider {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 1.1rem;
+  padding-bottom: 6px;
+  width: 28px;
+}
+
+/* Row 2: Departure · [Return] · Passengers · Class */
+.sf-details {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+.sf-details .form-group {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0; /* force equal flex even for date inputs */
+}
+.sf-details .form-group .input-icon-wrap {
+  width: 100%;
+}
+.sf-details .form-group .form-control {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .input-icon-wrap {
   position:relative;
@@ -871,7 +928,6 @@ nav {
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:var(--radius);
-  overflow:hidden;
   box-shadow:var(--card-shadow);
   animation: fadeIn 0.4s both;
 }
@@ -894,7 +950,7 @@ nav {
 }
 .booking-route .arrow { color:var(--accent); }
 .booking-item-body {
-  padding:1.25rem 1.5rem;
+  padding:1.25rem 1.5rem 1.75rem;
   border-top:1px solid var(--border);
   display:none;
 }
@@ -996,6 +1052,8 @@ nav {
 
   .search-row1 { grid-template-columns:1fr 1fr; }
   .search-row2 { grid-template-columns:1fr; }
+  .sf-cities { grid-template-columns:1fr 32px 1fr; }
+  .sf-details { grid-template-columns:1fr 1fr; }
   .flight-card {
     grid-template-columns:1fr 1fr;
     grid-template-rows:auto auto auto;
@@ -1017,6 +1075,9 @@ nav {
   .search-card { padding:1.5rem; border-radius:16px; }
   .search-row1 { grid-template-columns:1fr; }
   .search-row2 { grid-template-columns:1fr; }
+  .sf-cities { grid-template-columns:1fr; }
+  .sf-divider { display:none; }
+  .sf-details { grid-template-columns:1fr 1fr; }
 
   .results-page, .booking-page, .mybookings-page { padding:1rem; }
   
@@ -1113,13 +1174,13 @@ select option { background:var(--surface); color:var(--text); }
 .booking-item-body {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.35s ease, padding 0.3s ease;
+  transition: max-height 0.5s ease, padding 0.3s ease;
   padding: 0 1.5rem;
 }
 
 .booking-item-body.open {
-  max-height: 600px;
-  padding: 1.25rem 1.5rem;
+  max-height: 9999px;
+  padding: 1.25rem 1.5rem 1.75rem;
   border-top: 1px solid var(--border);
 }
 
